@@ -201,4 +201,3 @@ uint            raid_blockn(void);
 #define VIRTIO0_ID 0
 #define VIRTIO_RAID_DISK_START (1)
 #define VIRTIO_RAID_DISK_END (DISKS)
-//#define VIRTIO_RAID_DISK_SIZE (DISK_SIZE)

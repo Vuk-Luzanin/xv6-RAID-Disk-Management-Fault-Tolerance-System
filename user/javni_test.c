@@ -8,10 +8,10 @@ int
 main(int argc, char *argv[])
 {
 
-  init_raid(RAID1);
+  //init_raid(RAID1);
 
   uint disk_num, block_num, block_size;
-  //info_raid(&block_num, &block_size, &disk_num);
+  info_raid(&block_num, &block_size, &disk_num);
 
   uint blocks = (512 > block_num ? block_num : 512);
 
@@ -27,11 +27,11 @@ main(int argc, char *argv[])
 
   //disk_fail_raid(2);
 
-  check_data(blocks, blk, block_size);
+  //check_data(blocks, blk, block_size);
 
   //disk_repaired_raid(2);
 
-  check_data(blocks, blk, block_size);
+  //check_data(blocks, blk, block_size);
 
   free(blk);
 

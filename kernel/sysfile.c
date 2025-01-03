@@ -514,14 +514,61 @@ sys_init_raid(void)
 uint64
 sys_read_raid(void)
 {
-    printf("sys_read_raid pokrenut\n");
+    // Fetch arguments and check if they are valid
+    int vblkn;
+    argint(0, &vblkn);
+
+    if (vblkn < 0 || vblkn >= raid_blockn())
+        return -1;
+
+    struct proc* p = myproc();
+    uint64 data_addr;
+    argaddr(1, &data_addr);
+
+    if (data_addr < 0 || walkaddr(p->pagetable, data_addr) == 0 ||
+        walkaddr(p->pagetable, data_addr + BSIZE - 1) == 0)
+        return -1;
+
+    // Read block from RAID disk
+    uint diskn = vblkn % DISKS + 1;         // cannot write on disk0 (there is file system) -> +1
+    uint pblkn = vblkn / DISKS;
+
+    char data[BSIZE];
+
+    read_block(diskn, pblkn, (uchar*) data);
+
+    copyout(p->pagetable, data_addr, data, BSIZE);
+
     return 0;
 }
 
 uint64
 sys_write_raid(void)
 {
-    printf("sys_write_raid pokrenut\n");
+    // Fetch arguments and check if they are valid
+    int vblkn;
+    argint(0, &vblkn);
+
+    if (vblkn < 0 || vblkn >= raid_blockn())
+        return -1;
+
+    struct proc* p = myproc();
+    uint64 data_addr;
+    argaddr(1, &data_addr);
+    if (data_addr < 0 || walkaddr(p->pagetable, data_addr) == 0 ||
+        walkaddr(p->pagetable, data_addr + BSIZE - 1) == 0)
+        return -1;
+
+    // Write block to RAID disk
+    uint diskn = vblkn % DISKS + 1;         // cannot write on disk0 (there is file system) -> +1
+    uint pblkn = vblkn / DISKS;
+
+    char data[BSIZE];
+    if (copyin(p->pagetable, data, data_addr, BSIZE) < 0)
+        return -1;
+
+    write_block(diskn, pblkn, (uchar*) data);
+
     return 0;
 }
 
@@ -542,7 +589,7 @@ sys_disk_repaired_raid(void)
 uint64
 sys_info_raid(void)
 {
-    printf("Ukupna velicina RAID diska: %d\n\n", RAID_DISK_SIZE);
+    // printf("Ukupna velicina RAID diska u bajtovima: %d\n", RAID_DISK_SIZE);
 
     // Getting arguments from registers
     uint64 blkn_addr, blks_addr, diskn_addr;
