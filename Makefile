@@ -54,7 +54,7 @@ endif
 #DISKS can be from 1-8 -> when reading/writing we use 0-7 for addressing disks (cannot read/write on disk 0 - file system is there)
 
 ifndef DISKS
-DISKS := 3 # How many disks - including disk 0 for file system
+DISKS := 4 # How many disks - including disk 0 for file system
 endif
 
 ifndef DISK_SIZE
@@ -182,7 +182,7 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	else echo "-s -p $(GDBPORT)"; fi)
 
 ifndef CPUS
-CPUS := 1
+CPUS := 2
 endif
 
 ifndef MEM
