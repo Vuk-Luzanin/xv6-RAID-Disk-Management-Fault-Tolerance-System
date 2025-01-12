@@ -525,6 +525,8 @@ forkret(void)
     // be run from main().
     first = 0;
     fsinit(ROOTDEV);
+    // LOAD RAID STRUCTURE, WHEN FILE SYSTEM IS INITIALIZED AND IS RUNNING ON USER THREAD!
+    loadraid();
   }
 
   usertrapret();

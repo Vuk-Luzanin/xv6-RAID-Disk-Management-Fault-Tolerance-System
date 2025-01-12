@@ -30,6 +30,7 @@ OBJS = \
   $K/plic.o \
   $K/virtio_disk.o \
   $K/raid.o \
+  $K/sysraid.o \
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
@@ -50,15 +51,16 @@ TOOLPREFIX := $(shell if riscv64-unknown-elf-objdump -i 2>&1 | grep 'elf64-big' 
 endif
 
 
+#DISKS can be from 1-8 -> when reading/writing we use 0-7 for addressing disks (cannot read/write on disk 0 - file system is there)
 
 ifndef DISKS
-DISKS := 2 # How many RAID disks
+DISKS := 3 # How many disks - including disk 0 for file system
 endif
 
 ifndef DISK_SIZE
-#DISK_SIZE := 128M
+DISK_SIZE := 16M
 # IN BYTES
-DISK_SIZE := $(shell echo $$(expr 128 \* 1024 \* 1024))
+DISK_SIZE_BYTES := $(shell echo $$(expr 16 \* 1024 \* 1024))
 endif
 
 
@@ -76,7 +78,7 @@ OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
 
 CFLAGS = -Wall -Werror -O0 -fno-omit-frame-pointer -ggdb -gdwarf-2 -DDISKS=$(DISKS) -DMEM=$(MEM)
-CFLAGS += -DRAID_DISK_SIZE=$(DISK_SIZE)
+CFLAGS += -DDISK_SIZE_BYTES=$(DISK_SIZE_BYTES)
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax

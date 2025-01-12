@@ -309,6 +309,7 @@ virtio_disk_rw(int id, struct buf *b, int write)
 void write_block(int diskn, int blockno, uchar* data) {
     struct buf *b = transfer_buffer[diskn];
     b->blockno = blockno;
+
     memmove(b->data, data, BSIZE);
 
     virtio_disk_rw(diskn, b, 1);

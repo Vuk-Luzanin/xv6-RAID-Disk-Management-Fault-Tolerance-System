@@ -40,7 +40,7 @@ int atoi(const char*);
 int memcmp(const void *, const void *, uint);
 void *memcpy(void *, const void *, uint);
 
-enum RAID_TYPE {RAID0, RAID1, RAID0_1, RAID4, RAID5, INVALID};
+enum RAID_TYPE {RAID0, RAID1, RAID0_1, RAID4, RAID5};
 int init_raid(enum RAID_TYPE raid);
 int read_raid(int blkn, uchar* data);
 int write_raid(int blkn, uchar* data);

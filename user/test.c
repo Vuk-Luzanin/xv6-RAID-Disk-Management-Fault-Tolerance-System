@@ -5,6 +5,11 @@
 
 int
 main() {
+    printf("Testiranje init_raid...\n");
+    init_raid(RAID1);
+    printf("Uspesna inicijalizacija raida...\n");
+    printf("\n-----------------------------------------------------------------------------------------------------\n\n");
+
     printf("Testiranje info_raid...\n");
     uint blkn, blks, diskn;
     blkn = blks = diskn = -1;
@@ -21,18 +26,34 @@ main() {
 
     printf("Testiranje upisa i citanja...\n");
 
-    // Formiranje bloka
-    char data_write[BSIZE];
+//    int b, g;
+//
+//    if (fork())
+//    {
+//        b = 50;
+//        g = 0;
+//    }
+//    else
+//    {
+//        b = 100;
+//        g = 51;
+//    }
+//    char data[1024];
+//    while (b <= g)
+//    {
+//        for (int i=0; i<1024; i++)
+//            if (i%2)
+//                data[i] = b;
+//            else
+//                data[i] = g;
+//    }
+
+    char data[BSIZE];
     for (int i=0; i<BSIZE; i++)
-    {
-        if (i % 2)
-            data_write[i] = 'j';
-        else
-            data_write[i] = 'l';
-    }
+        data[i] = 'v';
 
     printf("Upis bloka...\n");
-    if (write_raid(0, (uchar*) data_write) < 0)
+    if (write_raid(0, (uchar*) data) < 0)
     {
         printf("Error in write_raid...\n");
         exit(0);
@@ -49,7 +70,7 @@ main() {
     printf("Uporedjivanje...\n");
     for (int i=0; i<BSIZE; i++)
     {
-        if (data_write[i] != data_read[i])
+        if (data[i] != data_read[i])
         {
             printf("Bad read...\n");
             exit(0);
@@ -57,7 +78,7 @@ main() {
     }
     printf("Uspesni upis i citanje bloka!\n");
 
-    printf("\n-----------------------------------------------------------------------------------------------------\n\n");
+//    printf("\n-----------------------------------------------------------------------------------------------------\n\n");
 
     exit(0);
 }

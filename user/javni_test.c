@@ -8,7 +8,7 @@ int
 main(int argc, char *argv[])
 {
 
-  //init_raid(RAID1);
+  init_raid(RAID1);
 
   uint disk_num, block_num, block_size;
   info_raid(&block_num, &block_size, &disk_num);
@@ -25,13 +25,19 @@ main(int argc, char *argv[])
 
   check_data(blocks, blk, block_size);
 
-  //disk_fail_raid(2);
+  printf("First check passed\n");
 
-  //check_data(blocks, blk, block_size);
+  disk_fail_raid(2);
 
-  //disk_repaired_raid(2);
+  check_data(blocks, blk, block_size);
 
-  //check_data(blocks, blk, block_size);
+  printf("Second check passed\n");
+
+//  disk_repaired_raid(2);
+
+//  check_data(blocks, blk, block_size);
+//
+//  printf("Third check passed\n");
 
   free(blk);
 

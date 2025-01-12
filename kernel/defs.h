@@ -129,6 +129,7 @@ void            initsleeplock(struct sleeplock*, char*);
 
 // string.c
 int             memcmp(const void*, const void*, uint);
+//              memmove(dst, src, size)
 void*           memmove(void*, const void*, uint);
 void*           memset(void*, int, uint);
 char*           safestrcpy(char*, const char*, int);
@@ -174,8 +175,11 @@ void            uvmfree(pagetable_t, uint64);
 void            uvmunmap(pagetable_t, uint64, uint64, int);
 void            uvmclear(pagetable_t, uint64);
 pte_t *         walk(pagetable_t, uint64, int);
+//              return 0 if virtual cannot be translated in physical
 uint64          walkaddr(pagetable_t, uint64);
+//              from physical to virtual space
 int             copyout(pagetable_t, uint64, char *, uint64);
+//              from virtual to physical space
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 
@@ -189,11 +193,19 @@ void            plic_complete(int);
 void            virtio_disk_init(int id, char* name);
 void            virtio_disk_rw(int id, struct buf *, int);
 void            virtio_disk_intr(int id);
+//                diskn is from [1, 7]
 void            write_block(int diskn, int blockno, uchar* data);
 void            read_block(int diskn, int blockno, uchar* data);
 
 // raid.c
-uint            raid_blockn(void);
+uint64          raidblockn(void);
+void            loadraid(void);
+uint64          setraidtype(int type);
+uint64          readraid(int vblkn, uchar* data);
+uint64          writeraid(int vblkn, uchar* data);
+uint64          raidfail(int diskn);
+uint64          raidrepair(int diskn);
+uint64          raiddestroy(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
