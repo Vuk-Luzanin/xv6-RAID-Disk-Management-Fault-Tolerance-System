@@ -198,6 +198,7 @@ void            write_block(int diskn, int blockno, uchar* data);
 void            read_block(int diskn, int blockno, uchar* data);
 
 // raid.c
+uint64          diskblockn();
 uint64          raidblockn(void);
 void            loadraid(void);
 uint64          setraidtype(int type);
@@ -206,6 +207,7 @@ uint64          writeraid(int vblkn, uchar* data);
 uint64          raidfail(int diskn);
 uint64          raidrepair(int diskn);
 uint64          raiddestroy(void);
+
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

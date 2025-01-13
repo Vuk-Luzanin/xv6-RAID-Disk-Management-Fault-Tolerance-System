@@ -38,4 +38,25 @@ struct RAID4Data
     int initialized;
 };
 
+extern uint64 (*readtable[])(int, uchar*);
+extern uint64 (*writetable[])(int, uchar*);
+
+struct RAIDMeta
+{
+    enum RAID_TYPE type;
+    struct DiskInfo diskinfo[DISKS + 1];
+
+    union
+    {
+        struct RAID0Data raid0;
+        struct RAID1Data raid1;
+        struct RAID0_1Data raid0_1;
+        struct RAID4Data raid4;
+    } data;
+
+    // virtual "methods" for each type
+    uint64 (*read)(int vblkn, uchar* data);
+    uint64 (*write)(int vblkn, uchar* data);
+};
+
 #endif //RAID_H

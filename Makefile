@@ -31,6 +31,10 @@ OBJS = \
   $K/virtio_disk.o \
   $K/raid.o \
   $K/sysraid.o \
+  $K/raid0.o \
+  $K/raid1.o \
+  $K/raid0_1.o \
+  $K/raid4.o \
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin

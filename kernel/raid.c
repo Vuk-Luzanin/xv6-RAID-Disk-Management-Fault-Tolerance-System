@@ -5,8 +5,8 @@
 #include "fs.h"
 #include "spinlock.h"
 #include "sleeplock.h"
-#include "raid.h"
 #include "defs.h"
+#include "raid.h"
 
 uint64 raid0read(int vblkn, uchar* data);
 uint64 raid1read(int vblkn, uchar* data);
@@ -36,25 +36,7 @@ uint64 (*writetable[])(int vblkn, uchar* data) =
 };
 
 // global variable
-struct
-{
-    enum RAID_TYPE type;
-
-    struct DiskInfo diskinfo[DISKS + 1];
-
-    union
-    {
-        struct RAID0Data raid0;
-        struct RAID1Data raid1;
-        struct RAID0_1Data raid0_1;
-        struct RAID4Data raid4;
-    } data;
-
-    // virtual "methods" for each type
-    uint64 (*read)(int vblkn, uchar* data);
-    uint64 (*write)(int vblkn, uchar* data);
-
-} raidmeta;
+struct RAIDMeta raidmeta;
 
 // DISK_SIZE_BYTES - in bytes
 // BSIZE - size of block in bytes
@@ -123,37 +105,38 @@ setraidtype(int type)
     raidmeta.write = writetable[type];
 
     switch (type) {
-        case RAID0: {
-            struct RAID0Data *raid0data = &raidmeta.data.raid0;
+        case RAID0:
+        {
+            struct RAID0Data *raiddata = &raidmeta.data.raid0;
             for (int i = 0; i < DISKS; i++)
-                initsleeplock(&raid0data->lock[i], "raidlock");
+                initsleeplock(&raiddata->lock[i], "raidlock");
             break;
         }
         case RAID1:
         {
-            struct RAID1Data *raid1data = &raidmeta.data.raid1;
+            struct RAID1Data *raiddata = &raidmeta.data.raid1;
             for (int i = 0; i < (DISKS + 1) / 2; i++) {
-                raid1data->diskpair[i].disk[0] = &raidmeta.diskinfo[i * 2];
-                raid1data->diskpair[i].disk[1] = &raidmeta.diskinfo[i * 2 + 1];
-                initlock(&raid1data->diskpair[i].mutex, "raidlock");
-                raid1data->diskpair[i].writing = 0;
+                raiddata->diskpair[i].disk[0] = &raidmeta.diskinfo[i * 2];
+                raiddata->diskpair[i].disk[1] = &raidmeta.diskinfo[i * 2 + 1];
+                initlock(&raiddata->diskpair[i].mutex, "raidlock");
+                raiddata->diskpair[i].writing = 0;
                 for (int j = 0; j < 2; j++)
-                    raid1data->diskpair[i].reading[j] = 0;
+                    raiddata->diskpair[i].reading[j] = 0;
             }
             break;
         }
         case RAID0_1:
         {
-            struct RAID0_1Data *raid0_1data = &raidmeta.data.raid0_1;
+            struct RAID0_1Data *raiddata = &raidmeta.data.raid0_1;
             for (int i = 0; i < DISKS / 2; i++)                         // even number of disks is used
             {
-                raid0_1data->diskpair[i].disk[0] = &raidmeta.diskinfo[i];
-                raid0_1data->diskpair[i].disk[1] = &raidmeta.diskinfo[i + DISKS / 2];
+                raiddata->diskpair[i].disk[0] = &raidmeta.diskinfo[i];
+                raiddata->diskpair[i].disk[1] = &raidmeta.diskinfo[i + DISKS / 2];
                 // added
-                initlock(&raid0_1data->diskpair[i].mutex, "raidlock");
-                raid0_1data->diskpair[i].writing = 0;
+                initlock(&raiddata->diskpair[i].mutex, "raidlock");
+                raiddata->diskpair[i].writing = 0;
                 for (int j = 0; j < 2; j++)
-                    raid0_1data->diskpair[i].reading[j] = 0;
+                    raiddata->diskpair[i].reading[j] = 0;
             }
             break;
         }
@@ -238,12 +221,14 @@ writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
             return -1;
         }
 
-        if (diskpair->writing) {
+        if (diskpair->writing)
+        {
             release(&diskpair->mutex);
             continue;
         }
 
-        if (diskpair->reading[0] == 1 || diskpair->reading[1] == 1) {
+        if (diskpair->reading[0] == 1 || diskpair->reading[1] == 1)
+        {
             release(&diskpair->mutex);
             continue;
         }
@@ -261,161 +246,6 @@ writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
     acquire(&diskpair->mutex);
     diskpair->writing = 0;
     release(&diskpair->mutex);
-
-    return 0;
-}
-
-uint64
-raid0read(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID0)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-    uint diskn = vblkn % DISKS;
-    uint pblkn = vblkn / DISKS;
-
-    struct RAID0Data* raiddata = &raidmeta.data.raid0;
-
-    struct DiskInfo* disk = &raidmeta.diskinfo[diskn];
-
-    if (!disk->valid)
-        return -1;
-
-    acquiresleep(&raiddata->lock[diskn]);
-    read_block(disk->diskn, pblkn, (uchar*)data);
-    releasesleep(&raiddata->lock[diskn]);
-    return 0;
-}
-
-uint64
-raid0write(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID0)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-    uint diskn = vblkn % DISKS;
-    uint pblkn = vblkn / DISKS;
-
-    struct RAID0Data* raiddata = &raidmeta.data.raid0;
-
-    struct DiskInfo* disk = &raidmeta.diskinfo[diskn];
-
-    if (!disk->valid)
-        return -1;
-
-    acquiresleep(&raiddata->lock[diskn]);
-    write_block(disk->diskn, pblkn, (uchar*)data);
-    releasesleep(&raiddata->lock[diskn]);
-
-    return 0;
-}
-
-uint64
-raid1read(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID1)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-    int pairNum = vblkn / diskblockn();
-    int pblkn = vblkn % diskblockn();
-
-    struct RAID1Data* raiddata = &raidmeta.data.raid1;
-    struct DiskPair* diskpair = &raiddata->diskpair[pairNum];
-
-    return readdiskpair(diskpair, pblkn, data);
-}
-
-uint64
-raid1write(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID1)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-    int pairNum = vblkn / diskblockn();
-    int pblkn = vblkn % diskblockn();
-
-    struct RAID1Data* raiddata = &raidmeta.data.raid1;
-    struct DiskPair* diskpair = &raiddata->diskpair[pairNum];
-
-    return writediskpair(diskpair, pblkn, data);
-}
-
-uint64
-raid0_1read(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID0_1)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-    // effectively DISKS / 2 to use
-    uint pairn = vblkn % (DISKS / 2);
-    uint pblkn = vblkn / (DISKS / 2);
-
-    struct RAID0_1Data* raiddata = &raidmeta.data.raid0_1;
-    struct DiskPair* diskpair = &raiddata->diskpair[pairn];
-
-    return readdiskpair(diskpair, pblkn, data);
-}
-
-uint64
-raid0_1write(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID0_1)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-    uint pairn = vblkn % (DISKS / 2);
-    uint pblkn = vblkn / (DISKS / 2);
-
-    struct RAID0_1Data* raiddata = &raidmeta.data.raid0_1;
-    struct DiskPair* diskpair = &raiddata->diskpair[pairn];
-
-    return writediskpair(diskpair, pblkn, data);
-}
-
-uint64
-raid4read(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID4)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
-
-//    uint64 diskn = vblkn % (DISKS - 1);
-//    uint64 pblkn = vblkn / (DISKS - 1);
-//
-//    struct RAID4Data raiddata = &raidmeta.data.raid4;
-
-
-
-    return 0;
-}
-
-uint64
-raid4write(int vblkn, uchar* data)
-{
-    if (raidmeta.type != RAID4)
-        panic("wrong raid function called\n");
-
-    if (vblkn < 0 || vblkn >= raidblockn())
-        return -1;
 
     return 0;
 }
@@ -467,85 +297,89 @@ raidrepair(int diskn)
     if (raidmeta.diskinfo[diskn].valid)
         return 0;
 
-    if (raidmeta.type == RAID0)
-        return -1;
-    else if (raidmeta.type == RAID1)
-    {
-        struct RAID1Data* raiddata = &raidmeta.data.raid1;
-        struct DiskPair* diskpair = &raiddata->diskpair[diskn / 2];
-        struct DiskInfo* pair = diskpair->disk[1 - diskn % 2];
-        if (!pair->valid)
-            return -1;
-
-        while (1)
+    switch (raidmeta.type) {
+        case RAID0:
         {
-            acquire(&diskpair->mutex);
+            return -1;
+        }
+        case RAID1:
+        {
+            struct RAID1Data* raiddata = &raidmeta.data.raid1;
+            struct DiskPair* diskpair = &raiddata->diskpair[diskn / 2];
+            struct DiskInfo* pair = diskpair->disk[1 - diskn % 2];
+            if (!pair->valid)
+                return -1;
 
-            if (diskpair->writing || diskpair->reading[0] || diskpair->reading[1])
+            while (1)
             {
+                acquire(&diskpair->mutex);
+
+                if (diskpair->writing || diskpair->reading[0] || diskpair->reading[1])
+                {
+                    release(&diskpair->mutex);
+                    continue;
+                }
+
+                diskpair->writing = 1;
                 release(&diskpair->mutex);
-                continue;
+                break;
             }
 
-            diskpair->writing = 1;
-            release(&diskpair->mutex);
-            break;
-        }
-
-        // WRITE EVERY BLOCK ON DISK FROM PAIR
-        for (int i = 0; i <= diskblockn(); i++)
-        {
-            uchar data[BSIZE];
-            read_block(pair->diskn, i, data);
-            write_block(raidmeta.diskinfo[diskn].diskn, i, data);
-        }
-
-        raidmeta.diskinfo[diskn].valid = 1;
-        acquire(&diskpair->mutex);
-        diskpair->writing = 0;
-        release(&diskpair->mutex);
-
-        return 0;
-    }
-    else if (raidmeta.type == RAID0_1)
-    {
-        struct RAID0_1Data* raiddata = &raidmeta.data.raid0_1;
-        struct DiskPair* diskpair = &raiddata->diskpair[diskn % (DISKS / 2)];
-        struct DiskInfo* pair = diskpair->disk[1 - diskn / (DISKS / 2)];
-
-        if (!pair->valid)
-            return -1;
-
-        while (1)
-        {
-            acquire(&diskpair->mutex);
-
-            if (diskpair->writing || diskpair->reading[0] || diskpair->reading[1])
+            // WRITE EVERY BLOCK ON DISK FROM PAIR
+            for (int i = 0; i <= diskblockn(); i++)
             {
-                release(&diskpair->mutex);
-                continue;
+                uchar data[BSIZE];
+                read_block(pair->diskn, i, data);
+                write_block(raidmeta.diskinfo[diskn].diskn, i, data);
             }
 
-            diskpair->writing = 1;
+            raidmeta.diskinfo[diskn].valid = 1;
+            acquire(&diskpair->mutex);
+            diskpair->writing = 0;
             release(&diskpair->mutex);
-            break;
-        }
 
-        for (int i = 0; i <= diskblockn(); i++)
+            return 0;
+        }
+        case RAID0_1:
         {
-            uchar data[BSIZE];
-            read_block(pair->diskn, i, data);
-            write_block(raidmeta.diskinfo[diskn].diskn, i, data);
+            struct RAID0_1Data* raiddata = &raidmeta.data.raid0_1;
+            struct DiskPair* diskpair = &raiddata->diskpair[diskn % (DISKS / 2)];
+            struct DiskInfo* pair = diskpair->disk[1 - diskn / (DISKS / 2)];
+
+            if (!pair->valid)
+                return -1;
+
+            while (1)
+            {
+                acquire(&diskpair->mutex);
+
+                if (diskpair->writing || diskpair->reading[0] || diskpair->reading[1])
+                {
+                    release(&diskpair->mutex);
+                    continue;
+                }
+
+                diskpair->writing = 1;
+                release(&diskpair->mutex);
+                break;
+            }
+
+            for (int i = 0; i <= diskblockn(); i++)
+            {
+                uchar data[BSIZE];
+                read_block(pair->diskn, i, data);
+                write_block(raidmeta.diskinfo[diskn].diskn, i, data);
+            }
+
+            raidmeta.diskinfo[diskn].valid = 1;
+            acquire(&diskpair->mutex);
+            diskpair->writing = 0;
+            release(&diskpair->mutex);
+
+            return 0;
         }
-
-        raidmeta.diskinfo[diskn].valid = 1;
-        acquire(&diskpair->mutex);
-        diskpair->writing = 0;
-        release(&diskpair->mutex);
-
-        return 0;
+        default:{}
     }
-
     return 0;
 }
 
