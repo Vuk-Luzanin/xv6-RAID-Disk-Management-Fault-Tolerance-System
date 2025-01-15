@@ -3,10 +3,26 @@
 #include "user/user.h"
 #include "kernel/fs.h"
 
+void check_data(uint blocks, uchar blk[BSIZE], uchar blk_read[BSIZE], uint block_size)
+{
+    for (uint i = 0; i < blocks; i++)
+    {
+        for (uint j = 0; j < block_size; j++)
+        {
+            if (blk_read[j] != blk[j])
+            {
+                printf("expected=%d got=%d", blk[j], blk_read[j]);
+                printf("Data in the block %d faulty\n", i);
+                break;
+            }
+        }
+    }
+}
+
 int
 main() {
     printf("Testiranje init_raid...\n");
-    init_raid(RAID1);
+    init_raid(RAID0);
     printf("Uspesna inicijalizacija raida...\n");
     printf("\n-----------------------------------------------------------------------------------------------------\n\n");
 
@@ -26,59 +42,56 @@ main() {
 
     printf("Testiranje upisa i citanja...\n");
 
-//    int b, g;
-//
-//    if (fork())
-//    {
-//        b = 50;
-//        g = 0;
-//    }
-//    else
-//    {
-//        b = 100;
-//        g = 51;
-//    }
-//    char data[1024];
-//    while (b <= g)
-//    {
-//        for (int i=0; i<1024; i++)
-//            if (i%2)
-//                data[i] = b;
-//            else
-//                data[i] = g;
-//    }
+    int l, h, pid;
+    uchar data[BSIZE];
+    uchar data_read[BSIZE];
+    int blocks = 200;
+    int child_procs = 5;
 
-    char data[BSIZE];
-    for (int i=0; i<BSIZE; i++)
-        data[i] = 'v';
-
-    printf("Upis bloka...\n");
-    if (write_raid(0, (uchar*) data) < 0)
-    {
-        printf("Error in write_raid...\n");
-        exit(0);
+    for (int i = 0; i < child_procs; i++) {
+        if (fork() == 0) {
+            // child
+            l = i * blocks;
+            h = l + blocks;
+            pid = i;
+            for (int j=0; j<BSIZE; j++)
+                data[j] = i+30;
+            break;      // child does not make children
+        } else {
+            l = child_procs * blocks;
+            h = l + blocks;
+            pid = child_procs;
+            for (int i=0; i<BSIZE; i++)
+                data[i] = 255;             //i=1
+        }
     }
 
-    char data_read[BSIZE];
-    printf("Citanje bloka...\n");
-    if (read_raid(0, (uchar*) data_read) < 0)
-    {
-        printf("Error in read_raid...\n");
-        exit(0);
-    }
+    printf("pid = %d Upis...\n", pid);
 
-    printf("Uporedjivanje...\n");
-    for (int i=0; i<BSIZE; i++)
+    for (int i = l; i < h; i++)
     {
-        if (data[i] != data_read[i])
+        if (write_raid(i, (uchar*) data) < 0)
         {
-            printf("Bad read...\n");
+            printf("Error in write_raid...\n");
             exit(0);
         }
     }
-    printf("Uspesni upis i citanje bloka!\n");
 
-//    printf("\n-----------------------------------------------------------------------------------------------------\n\n");
+    printf("pid = %d Citanje...\n", pid);
+
+    for (int i = l; i < h; i++)
+    {
+        if (read_raid(i, (uchar*) data_read) < 0)
+        {
+            printf("Error in read_raid...\n");
+            exit(0);
+        }
+    }
+
+    check_data(blocks, data, data_read, BSIZE);
+
+    printf("pid = %d Uspesni upis i citanje!\n", pid);
 
     exit(0);
 }
+

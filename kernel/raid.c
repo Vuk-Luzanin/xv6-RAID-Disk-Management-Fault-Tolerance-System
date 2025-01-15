@@ -117,7 +117,7 @@ setraidtype(int type)
             struct RAID1Data *raiddata = &raidmeta.data.raid1;
             for (int i = 0; i < (DISKS + 1) / 2; i++) {
                 raiddata->diskpair[i].disk[0] = &raidmeta.diskinfo[i * 2];
-                raiddata->diskpair[i].disk[1] = &raidmeta.diskinfo[i * 2 + 1];
+                raiddata->diskpair[i].disk[1] = &raidmeta.diskinfo[i * 2 + 1];      // because of this is diskinfo[DISKS + 1];
                 initlock(&raiddata->diskpair[i].mutex, "raidlock");
                 raiddata->diskpair[i].writing = 0;
                 for (int j = 0; j < 2; j++)
@@ -132,7 +132,6 @@ setraidtype(int type)
             {
                 raiddata->diskpair[i].disk[0] = &raidmeta.diskinfo[i];
                 raiddata->diskpair[i].disk[1] = &raidmeta.diskinfo[i + DISKS / 2];
-                // added
                 initlock(&raiddata->diskpair[i].mutex, "raidlock");
                 raiddata->diskpair[i].writing = 0;
                 for (int j = 0; j < 2; j++)
@@ -144,6 +143,8 @@ setraidtype(int type)
 //             for (int i = 0; i < DISKS; i++)
 //                 if (raidmeta.diskinfo[i].valid == 0)
 //                    return -1;
+//             if (raidmeta.data.diskinfo[DISKS - 1].valid == 0)
+//                 return -1;
 //
 //             Struct RAID4Data* raiddata = &raidmeta.data.raid4;
 //             raiddata->initialized = 0;
@@ -191,7 +192,6 @@ readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
                 readfromPair = i;       // to reset reading later
                 goto readdiskpairloopend;
             }
-
         release(&diskpair->mutex);
     }
 
@@ -285,7 +285,7 @@ raidfail(int diskn)         // cannot fail disk 0
 uint64
 raidrepair(int diskn)
 {
-    if (raidmeta.type < RAID0 || raidmeta.type >= RAID5)
+    if (raidmeta.type < RAID0 || raidmeta.type > RAID5)
         panic("raid not initialized\n");
 
     // diskn is [1-8]

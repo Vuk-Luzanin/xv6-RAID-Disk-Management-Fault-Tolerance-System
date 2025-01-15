@@ -24,6 +24,8 @@ raid0read(int vblkn, uchar* data)
     uint diskn = vblkn % DISKS;
     uint pblkn = vblkn / DISKS;
 
+
+
     struct RAID0Data* raiddata = &raidmeta.data.raid0;
 
     struct DiskInfo* disk = &raidmeta.diskinfo[diskn];

@@ -29,8 +29,8 @@ OBJS = \
   $K/kernelvec.o \
   $K/plic.o \
   $K/virtio_disk.o \
-  $K/raid.o \
   $K/sysraid.o \
+  $K/raid.o \
   $K/raid0.o \
   $K/raid1.o \
   $K/raid0_1.o \
@@ -58,13 +58,13 @@ endif
 #DISKS can be from 1-8 -> when reading/writing we use 0-7 for addressing disks (cannot read/write on disk 0 - file system is there)
 
 ifndef DISKS
-DISKS := 4 # How many disks - including disk 0 for file system
+DISKS := 5 # How many RAID disks - NOT including disk 0 for file system!
 endif
 
 ifndef DISK_SIZE
-DISK_SIZE := 16M
+DISK_SIZE := 1M
 # IN BYTES
-DISK_SIZE_BYTES := $(shell echo $$(expr 16 \* 1024 \* 1024))
+DISK_SIZE_BYTES := $(shell echo $$(expr 1 \* 1024 \* 1024))
 endif
 
 
@@ -186,7 +186,7 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	else echo "-s -p $(GDBPORT)"; fi)
 
 ifndef CPUS
-CPUS := 2
+CPUS := 3
 endif
 
 ifndef MEM
