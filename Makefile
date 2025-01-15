@@ -62,9 +62,9 @@ DISKS := 5 # How many RAID disks - NOT including disk 0 for file system!
 endif
 
 ifndef DISK_SIZE
-DISK_SIZE := 1M
+DISK_SIZE := 8M
 # IN BYTES
-DISK_SIZE_BYTES := $(shell echo $$(expr 1 \* 1024 \* 1024))
+DISK_SIZE_BYTES := $(shell echo $$(expr 8 \* 1024 \* 1024))
 endif
 
 
@@ -169,6 +169,7 @@ fs.img: mkfs/mkfs README $(UPROGS)
 
 -include kernel/*.d user/*.d
 
+
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*/*.o */*.d */*.asm */*.sym \
@@ -204,6 +205,7 @@ QEMUOPTS += $(shell count=`expr $(DISKS) - 1`; for i in `seq 0 $$count`;\
  					echo -n "-device virtio-blk-device,drive=x$$did,bus=virtio-mmio-bus.$$did ";\
  					done)
 
+
 qemu: $K/kernel fs.img $(RAID_DISKS)
 	$(QEMU) $(QEMUOPTS)
 
@@ -213,4 +215,5 @@ qemu: $K/kernel fs.img $(RAID_DISKS)
 qemu-gdb: $K/kernel .gdbinit fs.img $(RAID_DISKS)
 	@echo "*** Now run 'gdb' in another window." 1>&2
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
+
 

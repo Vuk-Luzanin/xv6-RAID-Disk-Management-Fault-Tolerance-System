@@ -8,55 +8,55 @@ int
 main(int argc, char *argv[])
 {
 
-  init_raid(RAID0_1);
+    init_raid(RAID0);
 
-  uint disk_num, block_num, block_size;
-  info_raid(&block_num, &block_size, &disk_num);
+    uint disk_num, block_num, block_size;
+    info_raid(&block_num, &block_size, &disk_num);
 
-  uint blocks = (512 > block_num ? block_num : 512);
+    uint blocks = (512 > block_num ? block_num : 512);
 
-  uchar* blk = malloc(block_size);
-  for (uint i = 0; i < blocks; i++) {
-    for (uint j = 0; j < block_size; j++) {
-      blk[j] = j + i;
+    uchar* blk = malloc(block_size);
+    for (uint i = 0; i < blocks; i++) {
+        for (uint j = 0; j < block_size; j++) {
+          blk[j] = j + i;
+        }
+        write_raid(i, blk);
     }
-    write_raid(i, blk);
-  }
 
-  check_data(blocks, blk, block_size);
+    check_data(blocks, blk, block_size);
 
-  printf("First check passed\n");
+    printf("First check passed\n");
 
-  disk_fail_raid(2);
+    disk_fail_raid(2);
 
-  check_data(blocks, blk, block_size);
+    check_data(blocks, blk, block_size);
 
-  printf("Second check passed\n");
+    printf("Second check passed\n");
 
-  disk_repaired_raid(2);
+    disk_repaired_raid(2);
 
-  check_data(blocks, blk, block_size);
+    check_data(blocks, blk, block_size);
 
-  printf("Third check passed\n");
+    printf("Third check passed\n");
 
-  free(blk);
+    free(blk);
 
-  exit(0);
+    exit(0);
 }
 
 void check_data(uint blocks, uchar *blk, uint block_size)
 {
-  for (uint i = 0; i < blocks; i++)
-  {
-    read_raid(i, blk);
-    for (uint j = 0; j < block_size; j++)
+    for (uint i = 0; i < blocks; i++)
     {
-      if ((uchar)(j + i) != blk[j])
-      {
-        printf("expected=%d got=%d", j + i, blk[j]);
-        printf("Data in the block %d faulty\n", i);
-        break;
-      }
+        read_raid(i, blk);
+        for (uint j = 0; j < block_size; j++)
+        {
+            if ((uchar)(j + i) != blk[j])
+            {
+                printf("expected=%d got=%d", j + i, blk[j]);
+                printf("Data in the block %d faulty\n", i);
+                    break;
+            }
+        }
     }
-  }
 }

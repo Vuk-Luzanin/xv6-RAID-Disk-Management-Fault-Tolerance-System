@@ -35,6 +35,7 @@ main() {
         printf("Error in info_raid...\n");
         exit(0);
     }
+
     printf("Broj blokova je: blkn = %d\n", blkn);
     printf("Velicina bloka je: blks = %d\n", blks);
     printf("Broj diskova je: diskn = %d\n", diskn);
@@ -46,7 +47,7 @@ main() {
     uchar data[BSIZE];
     uchar data_read[BSIZE];
     int blocks = 200;
-    int child_procs = 5;
+    int child_procs = 4;
 
     for (int i = 0; i < child_procs; i++) {
         if (fork() == 0) {

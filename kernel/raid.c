@@ -73,8 +73,34 @@ loadraid(void)
     uchar data[BSIZE];
     int lastblockondisk = diskblockn();
     read_block(1, lastblockondisk, data);
+
+    volatile int prevState = 0;
+    for (int i=0; i<BSIZE; i++)
+    {
+        if (data[i] == 255)
+        {
+            prevState = 1;
+            break;
+        }
+        if (data[i] != 0)
+        {
+            prevState = 2;
+        }
+    }
+
+    if (prevState == 1)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
+
     // extract raidmeta structure from block
     memmove(&raidmeta, data, sizeof(raidmeta));
+
+    if (prevState == 2)
+    {
+        return;                 // already initialized in previous run
+    }
 
     // set disk number and valid = 1
     for (int i = 0; i < DISKS; i++)
@@ -279,6 +305,13 @@ raidfail(int diskn)         // cannot fail disk 0
 
     raidmeta.diskinfo[diskn].valid = 0;
 
+    // write strusture on last block on every disk
+    int lastblockondisk = diskblockn();
+    uchar data[BSIZE] = {0};
+    memmove(data, &raidmeta, sizeof(raidmeta));
+    for (int i = 1; i <= DISKS; i++)
+        write_block(i, lastblockondisk, data);
+
     return 0;
 }
 
@@ -389,7 +422,9 @@ raiddestroy(void)
     raidmeta.type = -1;
 
     int lastblockondisk = diskblockn();
-    uchar data[BSIZE] = {0};
+    uchar data[BSIZE];                  // write all 1 on last block on every disk
+    for (int i = 0; i < BSIZE; i++)
+        data[i] = 255;
     memmove(data, &raidmeta, sizeof(raidmeta));
     for (int i = 1; i <= DISKS; i++)
         write_block(i, lastblockondisk, data);
