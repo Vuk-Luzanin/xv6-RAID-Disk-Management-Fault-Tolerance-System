@@ -19,11 +19,13 @@ raid0read(int vblkn, uchar* data)
         panic("wrong raid function called\n");
 
     if (vblkn < 0 || vblkn >= raidblockn())
+    {
+        printf("OVDE: %d", vblkn);
         return -1;
+    }
 
     uint diskn = vblkn % DISKS;
     uint pblkn = vblkn / DISKS;
-
 
 
     struct RAID0Data* raiddata = &raidmeta.data.raid0;

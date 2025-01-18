@@ -38,8 +38,7 @@ sys_read_raid(void)
     argaddr(1, &data_addr);
 
     // check if virtual address (for whole block) can be translated into physical address
-    if (data_addr < 0 || walkaddr(p->pagetable, data_addr) == 0 ||
-        walkaddr(p->pagetable, data_addr + BSIZE - 1) == 0)
+    if (data_addr < 0)
         return -1;
 
     char data[BSIZE];
@@ -54,8 +53,7 @@ sys_read_raid(void)
 }
 
 uint64
-sys_write_raid(void)
-{
+sys_write_raid(void) {
     // Fetch arguments and check if they are valid
     int vblkn;
     argint(0, &vblkn);
@@ -63,13 +61,12 @@ sys_write_raid(void)
     if (vblkn < 0 || vblkn >= raidblockn())
         return -1;
 
-    struct proc* p = myproc();
+    struct proc *p = myproc();
     uint64 data_addr;           // in virtual address space - parameter
     argaddr(1, &data_addr);
 
     // check if virtual address (for whole block) can be translated into physical address
-    if (data_addr < 0 || walkaddr(p->pagetable, data_addr) == 0 ||
-        walkaddr(p->pagetable, data_addr + BSIZE - 1) == 0)
+    if (data_addr < 0)
         return -1;
 
     char data[BSIZE];
@@ -77,7 +74,7 @@ sys_write_raid(void)
     if (copyin(p->pagetable, data, data_addr, BSIZE) < 0)
         return -1;
 
-    return writeraid(vblkn, (uchar*)data);
+    return writeraid(vblkn, (uchar *) data);
 }
 
 uint64

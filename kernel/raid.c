@@ -88,15 +88,14 @@ loadraid(void)
         }
     }
 
+    // extract raidmeta structure from block - must read in every case
+    memmove(&raidmeta, data, sizeof(raidmeta));
+
     if (prevState == 1)
     {
         panic("RAID structure was destroyed\n");
         exit(0);
     }
-
-    // extract raidmeta structure from block
-    memmove(&raidmeta, data, sizeof(raidmeta));
-
     if (prevState == 2)
     {
         return;                 // already initialized in previous run
@@ -193,11 +192,12 @@ uint64
 readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
 {
     int diskn = -1, readfromPair = -1;
-    // busy wait on spinlock
+
+    // sleep wait on spinlock
+    acquire(&diskpair->mutex);
+
     while (1)
     {
-        acquire(&diskpair->mutex);
-
         // both invalid
         if (diskpair->disk[0]->valid == 0 && diskpair->disk[1]->valid == 0)
         {
@@ -205,8 +205,9 @@ readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
             return -1;
         }
 
-        if (diskpair->writing) {
-            release(&diskpair->mutex);
+        if (diskpair->writing)
+        {
+            sleep(&diskpair->mutex, &diskpair->mutex);          // 1. ARG - channel for sleeping (when waking up -> all channel is waking up - can be any number), second is spinlock
             continue;           // busy wait, try to acquire again
         }
 
@@ -218,7 +219,7 @@ readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
                 readfromPair = i;       // to reset reading later
                 goto readdiskpairloopend;
             }
-        release(&diskpair->mutex);
+        sleep(&diskpair->mutex, &diskpair->mutex);
     }
 
     readdiskpairloopend:
@@ -230,6 +231,7 @@ readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
     acquire(&diskpair->mutex);
     diskpair->reading[readfromPair] = 0;
     release(&diskpair->mutex);
+    wakeup(&diskpair->mutex);       // arg is channel
 
     return 0;
 }
@@ -237,10 +239,10 @@ readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
 uint64
 writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
 {
+    acquire(&diskpair->mutex);          //must be outside of loop ()
+
     while (1)
     {
-        acquire(&diskpair->mutex);
-
         if (diskpair->disk[0]->valid == 0 && diskpair->disk[1]->valid == 0)
         {
             release(&diskpair->mutex);
@@ -249,13 +251,13 @@ writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
 
         if (diskpair->writing)
         {
-            release(&diskpair->mutex);
+            sleep(&diskpair->mutex, &diskpair->mutex);          // 1. ARG - channel for sleeping (when waking up -> all channel is waking up - can be any number), second is spinlock
             continue;
         }
 
         if (diskpair->reading[0] == 1 || diskpair->reading[1] == 1)
         {
-            release(&diskpair->mutex);
+            sleep(&diskpair->mutex, &diskpair->mutex);          // 1. ARG - channel for sleeping (when waking up -> all channel is waking up - can be any number), second is spinlock
             continue;
         }
 
@@ -272,6 +274,7 @@ writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
     acquire(&diskpair->mutex);
     diskpair->writing = 0;
     release(&diskpair->mutex);
+    wakeup(&diskpair->mutex);       // arg is channel
 
     return 0;
 }

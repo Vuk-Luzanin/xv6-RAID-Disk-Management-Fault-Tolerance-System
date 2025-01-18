@@ -7,8 +7,7 @@ void check_data(uint blocks, uchar *blk, uint block_size);
 int
 main(int argc, char *argv[])
 {
-
-    init_raid(RAID0);
+    init_raid(RAID1);
 
     uint disk_num, block_num, block_size;
     info_raid(&block_num, &block_size, &disk_num);
