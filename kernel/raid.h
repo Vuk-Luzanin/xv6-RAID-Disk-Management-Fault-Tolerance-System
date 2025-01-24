@@ -32,13 +32,13 @@ struct RAID0_1Data
     struct DiskPair diskpair[DISKS / 2];
 };
 
-//uint64 CLUSTER_SIZE = 1024;
+#define CLUSTER_SIZE 1024
 
 struct RAID4Data
 {
-    struct sleeplock mutex;
-//    int initialized;
-    //uint8 stripe_loaded[DISKS_SIZE / BSIZE / CLUSTER_SIZE];         // has initialized flag for cluster
+    struct sleeplock lock[DISKS];                                           // for every DISK
+    uint8 cluster_loaded[DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE];           // has initialized flag for cluster -> for lazy loading
+    // uint64 cluster_loaded[]
 };
 
 extern uint64 (*readtable[])(int, uchar*);

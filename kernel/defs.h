@@ -198,6 +198,7 @@ void            write_block(int diskn, int blockno, uchar* data);
 void            read_block(int diskn, int blockno, uchar* data);
 
 // raid.c
+void            writeraidmeta();
 uint64          diskblockn();
 uint64          raidblockn(void);
 void            loadraid(void);

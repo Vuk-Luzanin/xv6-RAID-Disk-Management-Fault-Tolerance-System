@@ -38,6 +38,17 @@ uint64 (*writetable[])(int vblkn, uchar* data) =
 // global variable
 struct RAIDMeta raidmeta;
 
+void
+writeraidmeta()
+{
+    // write strusture on last block on every disk
+    int lastblockondisk = diskblockn();
+    uchar data[BSIZE] = {0};
+    memmove(data, &raidmeta, sizeof(raidmeta));
+    for (int i = 1; i <= DISKS; i++)
+        write_block(i, lastblockondisk, data);
+}
+
 // DISK_SIZE_BYTES - in bytes
 // BSIZE - size of block in bytes
 // number of free blocks on disk -> -1 because it counts from 0
@@ -164,26 +175,24 @@ setraidtype(int type)
             }
             break;
         }
-//        case RAID4:
-//             for (int i = 0; i < DISKS; i++)
-//                 if (raidmeta.diskinfo[i].valid == 0)
-//                    return -1;
-//             if (raidmeta.data.diskinfo[DISKS - 1].valid == 0)
-//                 return -1;
-//
-//             Struct RAID4Data* raiddata = &raidmeta.data.raid4;
-//             raiddata->initialized = 0;
-//             initraid4(raiddata, 100);
-//             initsleeplock(&raiddata->mutex, "raidlock");
-//             break;
+        case RAID4:
+        {
+            if (raidmeta.diskinfo[DISKS - 1].valid == 0)              // if parity is not valid
+                return -1;
+
+            struct RAID4Data* raiddata = &raidmeta.data.raid4;
+
+            for (int i=0; i<DISKS; i++)
+                initsleeplock(&raiddata->lock[i], "disklock");
+
+            for (int i=0; i<DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE; i++)
+                raiddata->cluster_loaded[i] = 0;
+
+            break;
+        }
     }
 
-    // write strusture on last block on every disk
-    int lastblockondisk = diskblockn();
-    uchar data[BSIZE] = {0};
-    memmove(data, &raidmeta, sizeof(raidmeta));
-    for (int i = 1; i <= DISKS; i++)
-        write_block(i, lastblockondisk, data);
+    writeraidmeta();
 
     return 0;
 }
@@ -308,16 +317,13 @@ raidfail(int diskn)         // cannot fail disk 0
 
     raidmeta.diskinfo[diskn].valid = 0;
 
-    // write strusture on last block on every disk
-    int lastblockondisk = diskblockn();
-    uchar data[BSIZE] = {0};
-    memmove(data, &raidmeta, sizeof(raidmeta));
-    for (int i = 1; i <= DISKS; i++)
-        write_block(i, lastblockondisk, data);
+    writeraidmeta();
 
     return 0;
 }
 
+
+// TO-DO -> write raidmeta on disk
 uint64
 raidrepair(int diskn)
 {
@@ -346,13 +352,13 @@ raidrepair(int diskn)
             if (!pair->valid)
                 return -1;
 
+            acquire(&diskpair->mutex);
+
             while (1)
             {
-                acquire(&diskpair->mutex);
-
                 if (diskpair->writing || diskpair->reading[0] || diskpair->reading[1])
                 {
-                    release(&diskpair->mutex);
+                    sleep(&diskpair->mutex, &diskpair->mutex);
                     continue;
                 }
 
@@ -373,6 +379,7 @@ raidrepair(int diskn)
             acquire(&diskpair->mutex);
             diskpair->writing = 0;
             release(&diskpair->mutex);
+            wakeup(&diskpair->mutex);
 
             return 0;
         }
@@ -385,13 +392,13 @@ raidrepair(int diskn)
             if (!pair->valid)
                 return -1;
 
+            acquire(&diskpair->mutex);
+
             while (1)
             {
-                acquire(&diskpair->mutex);
-
                 if (diskpair->writing || diskpair->reading[0] || diskpair->reading[1])
                 {
-                    release(&diskpair->mutex);
+                    sleep(&diskpair->mutex, &diskpair->mutex);
                     continue;
                 }
 
@@ -411,10 +418,12 @@ raidrepair(int diskn)
             acquire(&diskpair->mutex);
             diskpair->writing = 0;
             release(&diskpair->mutex);
+            wakeup(&diskpair->mutex);
 
             return 0;
         }
-        default:{}
+        default:
+        {}
     }
     return 0;
 }

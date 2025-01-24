@@ -22,7 +22,7 @@ void check_data(uint blocks, uchar blk[BSIZE], uchar blk_read[BSIZE], uint block
 int
 main() {
     printf("Testiranje init_raid...\n");
-    init_raid(RAID0_1);
+    init_raid(RAID4);
     printf("Uspesna inicijalizacija raida...\n");
     printf("\n-----------------------------------------------------------------------------------------------------\n\n");
 
@@ -46,8 +46,8 @@ main() {
     int l, h, pid;
     uchar data[BSIZE];
     uchar data_read[BSIZE];
-    int blocks = 200;
-    int child_procs = 38;
+    int blocks = 1000;
+    int child_procs = 0;
 
     for (int i = 0; i < child_procs; i++) {
         if (fork() == 0) {
@@ -66,6 +66,14 @@ main() {
                 data[i] = 255;             //i=child_procs-1
         }
     }
+
+    l = child_procs * blocks;
+    h = l + blocks;
+    pid = child_procs;
+    for (int i=0; i<BSIZE; i++)
+        data[i] = 255;
+
+
 
     printf("pid = %d Upis...\n", pid);
 
