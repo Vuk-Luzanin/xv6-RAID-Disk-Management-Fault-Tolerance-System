@@ -101,6 +101,7 @@ struct proc*    myproc();
 void            procinit(void);
 void            scheduler(void) __attribute__((noreturn));
 void            sched(void);
+// 1. ARG - channel for sleeping (when waking up -> all channel is waking up - can be any number), second is spinlock
 void            sleep(void*, struct spinlock*);
 void            userinit(void);
 int             wait(uint64);
