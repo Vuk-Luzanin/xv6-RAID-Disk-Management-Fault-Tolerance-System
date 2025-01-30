@@ -180,6 +180,20 @@ setraidtype(int type)
             if (raidmeta.diskinfo[DISKS - 1].valid == 0)              // if parity is not valid
                 return -1;
 
+//            raidmeta.valid = 1;
+//            raidmeta.type = RAID4;
+//            raidmeta.read = raid4read;
+//            raidmeta.write = raid4write;
+//            raidmeta.blockn = raid4blockn;
+//
+//            struct RAID4Data* raiddata = &raidmeta.data.raid4;
+//            for (int i = 0; i < DISKS; i++)
+//                initsleeplock(&raiddata->lock[i], "raid4lock");
+//            initsleeplock(&raiddata->grouplock, "raid4grouplock");
+//
+//            for (int i = 0; i < NELEM(raiddata->groupvalid); i++)
+//                raiddata->groupvalid[i] = 0;
+
             struct RAID4Data* raiddata = &raidmeta.data.raid4;
 
             for (int i=0; i<DISKS; i++)
