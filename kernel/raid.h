@@ -19,26 +19,27 @@ struct DiskPair
 
 struct RAID0Data
 {
-    struct sleeplock lock[DISKS];
+    struct sleeplock lock[DISKS];       // lock per disk
 };
 
 struct RAID1Data
 {
-    struct DiskPair diskpair[(DISKS + 1) / 2];
+    struct DiskPair diskpair[(DISKS + 1) / 2];      // lock per pair
 };
 
 struct RAID0_1Data
 {
-    struct DiskPair diskpair[DISKS / 2];
+    struct DiskPair diskpair[DISKS / 2];            // lock per pair
 };
 
+// number of blocks in one cluster
 #define CLUSTER_SIZE 1024
 
 struct RAID4Data
 {
-    struct sleeplock lock[DISKS];                                           // for every DISK
-    uint8 cluster_loaded[DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE];           // has initialized flag for cluster -> for lazy loading
-    // uint64 cluster_loaded[]
+    struct sleeplock lock[DISKS];                                           // lock per disk
+    uint8 cluster_loaded[DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE];           // has been initialized flag for cluster (parity disk is set or not) -> for lazy loading
+    struct sleeplock clusterlock;                                           // lock for cluster_loaded array
 };
 
 extern uint64 (*readtable[])(int, uchar*);
@@ -48,6 +49,10 @@ struct RAIDMeta
 {
     enum RAID_TYPE type;
     struct DiskInfo diskinfo[DISKS + 1];
+    int isdestroyed;
+
+    struct spinlock dirty;
+    int maxdirty;
 
     union
     {

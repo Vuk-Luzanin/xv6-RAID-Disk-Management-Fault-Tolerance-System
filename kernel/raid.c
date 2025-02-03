@@ -41,17 +41,26 @@ struct RAIDMeta raidmeta;
 void
 writeraidmeta()
 {
+    printf("USAO U WRITERAIDMETA\n");
+
     // write strusture on last block on every disk
     int lastblockondisk = diskblockn();
     uchar data[BSIZE] = {0};
     memmove(data, &raidmeta, sizeof(raidmeta));
+
+    if (data[BSIZE-1] == 255)
+    {
+        printf("RAID structure was destroyed write meta\n");
+        exit(0);
+    }
+
     for (int i = 1; i <= DISKS; i++)
         write_block(i, lastblockondisk, data);
 }
 
 // DISK_SIZE_BYTES - in bytes
 // BSIZE - size of block in bytes
-// number of free blocks on disk -> -1 because it counts from 0
+// returns last free block on disk -> -1 because it counts from 0
 uint64
 diskblockn()
 {
@@ -85,17 +94,19 @@ loadraid(void)
     int lastblockondisk = diskblockn();
     read_block(1, lastblockondisk, data);
 
+    if (data[BSIZE-1] == 255)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
+
     volatile int prevState = 0;
     for (int i=0; i<BSIZE; i++)
     {
-        if (data[i] == 255)
+        if (data[i] != 0)
         {
             prevState = 1;
             break;
-        }
-        if (data[i] != 0)
-        {
-            prevState = 2;
         }
     }
 
@@ -104,15 +115,12 @@ loadraid(void)
 
     if (prevState == 1)
     {
-        panic("RAID structure was destroyed\n");
-        exit(0);
-    }
-    if (prevState == 2)
-    {
         return;                 // already initialized in previous run
     }
 
-    // set disk number and valid = 1
+    printf("U LOADRAID JE RAIDMETA 0\n");
+
+    // set disk number and valid = 1 -> not already initialized
     for (int i = 0; i < DISKS; i++)
     {
         // disks will have diskn -> [1, 8]
@@ -121,13 +129,19 @@ loadraid(void)
     }
     raidmeta.diskinfo[DISKS].valid = 0;
 
+    initlock(&raidmeta.dirty, "raidmetadirty");
+    raidmeta.maxdirty = -1;
+
     if (raidmeta.type >= RAID0 && raidmeta.type <= RAID5)
     {
         raidmeta.read = readtable[raidmeta.type];
         raidmeta.write = writetable[raidmeta.type];
     }
     else
+    {
         raidmeta.read = raidmeta.write = 0;
+    }
+    writeraidmeta();
 }
 
 uint64
@@ -180,28 +194,20 @@ setraidtype(int type)
             if (raidmeta.diskinfo[DISKS - 1].valid == 0)              // if parity is not valid
                 return -1;
 
-//            raidmeta.valid = 1;
-//            raidmeta.type = RAID4;
-//            raidmeta.read = raid4read;
-//            raidmeta.write = raid4write;
-//            raidmeta.blockn = raid4blockn;
-//
-//            struct RAID4Data* raiddata = &raidmeta.data.raid4;
-//            for (int i = 0; i < DISKS; i++)
-//                initsleeplock(&raiddata->lock[i], "raid4lock");
-//            initsleeplock(&raiddata->grouplock, "raid4grouplock");
-//
-//            for (int i = 0; i < NELEM(raiddata->groupvalid); i++)
-//                raiddata->groupvalid[i] = 0;
-
             struct RAID4Data* raiddata = &raidmeta.data.raid4;
 
             for (int i=0; i<DISKS; i++)
                 initsleeplock(&raiddata->lock[i], "disklock");
+            initsleeplock(&raiddata->clusterlock, "clusterlock");
 
-            for (int i=0; i<DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE; i++)
+            int maxdirtycluster = raidmeta.maxdirty > 0 ? raidmeta.maxdirty / CLUSTER_SIZE : raidmeta.maxdirty;
+            printf("Max dirty cluster: %d\n", maxdirtycluster);
+
+            for (int i=0; i<=maxdirtycluster; i++)          // must be reinitialized
                 raiddata->cluster_loaded[i] = 0;
 
+            for (int i=maxdirtycluster+1; i<NELEM(raiddata->cluster_loaded); i++)
+                raiddata->cluster_loaded[i] = 1;
             break;
         }
     }

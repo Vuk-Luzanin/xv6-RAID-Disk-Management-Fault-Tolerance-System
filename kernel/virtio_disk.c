@@ -15,6 +15,10 @@
 #include "fs.h"
 #include "buf.h"
 #include "virtio.h"
+#include "raid.h"
+
+// global variable
+extern struct RAIDMeta raidmeta;
 
 // the address of virtio mmio register r.
 #define R(offset,r) ((volatile uint32 *)(VIRTIO0 + VIRTIO_OFFSET * offset + (r)))
@@ -307,6 +311,15 @@ virtio_disk_rw(int id, struct buf *b, int write)
 }
 
 void write_block(int diskn, int blockno, uchar* data) {
+    // keep track of last dirty block
+    if (diskn > 0 && blockno != diskblockn())          // if not writing in file system and not on last block on disk
+    {
+        acquire(&raidmeta.dirty);
+        if (blockno > raidmeta.maxdirty)
+            raidmeta.maxdirty = blockno;
+        release(&raidmeta.dirty);
+    }
+
     struct buf *b = transfer_buffer[diskn];
     b->blockno = blockno;
 
