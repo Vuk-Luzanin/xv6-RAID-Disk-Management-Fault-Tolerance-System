@@ -41,19 +41,11 @@ struct RAIDMeta raidmeta;
 void
 writeraidmeta()
 {
-    printf("USAO U WRITERAIDMETA\n");
-
+    printf("cuva raidmeta\n");
     // write strusture on last block on every disk
     int lastblockondisk = diskblockn();
     uchar data[BSIZE] = {0};
     memmove(data, &raidmeta, sizeof(raidmeta));
-
-    if (data[BSIZE-1] == 255)
-    {
-        printf("RAID structure was destroyed write meta\n");
-        exit(0);
-    }
-
     for (int i = 1; i <= DISKS; i++)
         write_block(i, lastblockondisk, data);
 }
@@ -115,10 +107,9 @@ loadraid(void)
 
     if (prevState == 1)
     {
+        printf("MAXDIRTY je sacuvan: %d\n", raidmeta.maxdirty);
         return;                 // already initialized in previous run
     }
-
-    printf("U LOADRAID JE RAIDMETA 0\n");
 
     // set disk number and valid = 1 -> not already initialized
     for (int i = 0; i < DISKS; i++)
@@ -142,6 +133,8 @@ loadraid(void)
         raidmeta.read = raidmeta.write = 0;
     }
     writeraidmeta();
+    printf("MAXDIRTY je resetovan: %d\n", raidmeta.maxdirty);
+
 }
 
 uint64

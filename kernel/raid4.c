@@ -176,5 +176,7 @@ raid4write(int vblkn, uchar* data)
 
     kfree(page);
 
+    writeraidmeta();
+
     return 0;
 }

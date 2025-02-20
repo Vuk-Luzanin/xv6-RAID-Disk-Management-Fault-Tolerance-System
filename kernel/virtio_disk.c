@@ -319,6 +319,7 @@ void write_block(int diskn, int blockno, uchar* data) {
             raidmeta.maxdirty = blockno;
         release(&raidmeta.dirty);
     }
+    printf("MAX DIRTY U drajvery: %d\n",raidmeta.maxdirty);
 
     struct buf *b = transfer_buffer[diskn];
     b->blockno = blockno;

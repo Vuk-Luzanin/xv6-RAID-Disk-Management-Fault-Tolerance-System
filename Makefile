@@ -81,6 +81,7 @@ LD = $(TOOLPREFIX)ld
 OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
 
+# flegovi za debagovanje - obrisati na kraju
 CFLAGS = -Wall -Werror -O0 -fno-omit-frame-pointer -ggdb -gdwarf-2 -DDISKS=$(DISKS) -DMEM=$(MEM)
 CFLAGS += -DDISK_SIZE_BYTES=$(DISK_SIZE_BYTES)
 CFLAGS += -MD

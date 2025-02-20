@@ -324,6 +324,7 @@ static inline void
 sfence_vma()
 {
   // the zero, zero means flush all TLB entries.
+  // moze se navesti i adresa koju, ako zelimo samo jednu da ponistimo
   asm volatile("sfence.vma zero, zero");
 }
 
