@@ -34,22 +34,23 @@ loadcluster(uint64 clustern)
         acquiresleep(&raiddata->lock[i]);
 
     uint64 startblock = clustern * CLUSTER_SIZE;
-    for (int i=startblock; i<CLUSTER_SIZE; i++)
+    for (int i=startblock; i<startblock + CLUSTER_SIZE; i++)
     {
         for (int i=0; i<BSIZE; i++)
             parity[i] = 0;
 
         struct DiskInfo* diskinfo = raidmeta.diskinfo;
+
         for (int diskn=1; diskn<DISKS; diskn++)
         {
             if (diskinfo[diskn].valid)
             {
-                read_block(diskn, startblock + i, data);
+                read_block(diskn, i, data);
                 for (int i=0; i<BSIZE; i++)
                     parity[i] ^= data[i];
             }
         }
-        write_block(DISKS, startblock + i, parity);
+        write_block(DISKS, i, parity);
     }
 
     raiddata->cluster_loaded[clustern] = 1;

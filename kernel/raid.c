@@ -38,17 +38,39 @@ uint64 (*writetable[])(int vblkn, uchar* data) =
 // global variable
 struct RAIDMeta raidmeta;
 
+// old impl.
+//void
+//writeraidmeta()
+//{
+//    //printf("cuva raidmeta\n");
+//    // write structure on last block on every disk
+//    int lastblockondisk = diskblockn();
+//    uchar data[BSIZE] = {0};
+//    memmove(data, &raidmeta, sizeof(raidmeta));
+//    for (int i = 1; i <= DISKS; i++)
+//        write_block(i, lastblockondisk, data);
+//}
+
+// new impl -> need to be checked
 void
 writeraidmeta()
 {
-    printf("cuva raidmeta\n");
-    // write strusture on last block on every disk
-    int lastblockondisk = diskblockn();
-    uchar data[BSIZE] = {0};
-    memmove(data, &raidmeta, sizeof(raidmeta));
+    //printf("cuva raidmeta\n");
+    // write structure on last block on every disk
     for (int i = 1; i <= DISKS; i++)
-        write_block(i, lastblockondisk, data);
+    {
+        struct DiskInfo* diskInfo = raidmeta.diskinfo + i;
+        if (diskInfo->valid)
+        {
+            uchar data[BSIZE] = {0};
+            memmove(data, &raidmeta, sizeof(raidmeta));
+            int lastblockondisk = diskblockn();
+            write_block(i, lastblockondisk, data);
+        }
+    }
 }
+
+
 
 // DISK_SIZE_BYTES - in bytes
 // BSIZE - size of block in bytes
@@ -73,6 +95,8 @@ raidblockn(void)
             return diskblockn() * (DISKS / 2);
         case RAID4:
             return diskblockn() * (DISKS - 1);
+        case RAID5:
+            return diskblockn() * (DISKS - 1);
         default:
             panic("bad raid type\n");
     }
@@ -92,6 +116,7 @@ loadraid(void)
         exit(0);
     }
 
+    // ako je prethodno vec inicijalizovan raidmeta -> u tom bloku ce biti bar neki bajt != 0
     volatile int prevState = 0;
     for (int i=0; i<BSIZE; i++)
     {
@@ -107,8 +132,8 @@ loadraid(void)
 
     if (prevState == 1)
     {
-        printf("MAXDIRTY je sacuvan: %d\n", raidmeta.maxdirty);
-        return;                 // already initialized in previous run
+//        printf("MAXDIRTY je sacuvan: %d\n", raidmeta.maxdirty);
+        return;                 // already initialized raidmeta in previous run, just return
     }
 
     // set disk number and valid = 1 -> not already initialized
@@ -120,8 +145,8 @@ loadraid(void)
     }
     raidmeta.diskinfo[DISKS].valid = 0;
 
-    initlock(&raidmeta.dirty, "raidmetadirty");
-    raidmeta.maxdirty = -1;
+    //initlock(&raidmeta.dirty, "raidmetadirty");
+    //raidmeta.maxdirty = -1;
 
     if (raidmeta.type >= RAID0 && raidmeta.type <= RAID5)
     {
@@ -133,8 +158,7 @@ loadraid(void)
         raidmeta.read = raidmeta.write = 0;
     }
     writeraidmeta();
-    printf("MAXDIRTY je resetovan: %d\n", raidmeta.maxdirty);
-
+    //printf("MAXDIRTY je resetovan: %d\n", raidmeta.maxdirty);
 }
 
 uint64
@@ -193,14 +217,18 @@ setraidtype(int type)
                 initsleeplock(&raiddata->lock[i], "disklock");
             initsleeplock(&raiddata->clusterlock, "clusterlock");
 
-            int maxdirtycluster = raidmeta.maxdirty > 0 ? raidmeta.maxdirty / CLUSTER_SIZE : raidmeta.maxdirty;
-            printf("Max dirty cluster: %d\n", maxdirtycluster);
+            //int maxdirtycluster = raidmeta.maxdirty > 0 ? raidmeta.maxdirty / CLUSTER_SIZE : raidmeta.maxdirty;
+            //printf("Max dirty cluster: %d\n", maxdirtycluster);
 
-            for (int i=0; i<=maxdirtycluster; i++)          // must be reinitialized
+            //for (int i=0; i<=maxdirtycluster; i++)          // must be reinitialized
+            //    raiddata->cluster_loaded[i] = 0;
+
+            //for (int i=maxdirtycluster+1; i<NELEM(raiddata->cluster_loaded); i++)
+            //    raiddata->cluster_loaded[i] = 1;
+
+            for (int i=0; i<NELEM(raiddata->cluster_loaded); i++)
                 raiddata->cluster_loaded[i] = 0;
 
-            for (int i=maxdirtycluster+1; i<NELEM(raiddata->cluster_loaded); i++)
-                raiddata->cluster_loaded[i] = 1;
             break;
         }
     }

@@ -33,9 +33,16 @@ struct RAID0_1Data
 };
 
 // number of blocks in one cluster
-#define CLUSTER_SIZE 1024
+#define CLUSTER_SIZE 128
 
 struct RAID4Data
+{
+    struct sleeplock lock[DISKS];                                           // lock per disk
+    uint8 cluster_loaded[DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE];           // has been initialized flag for cluster (parity disk is set or not) -> for lazy loading
+    struct sleeplock clusterlock;                                           // lock for cluster_loaded array
+};
+
+struct RAID5Data
 {
     struct sleeplock lock[DISKS];                                           // lock per disk
     uint8 cluster_loaded[DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE];           // has been initialized flag for cluster (parity disk is set or not) -> for lazy loading
@@ -49,10 +56,10 @@ struct RAIDMeta
 {
     enum RAID_TYPE type;
     struct DiskInfo diskinfo[DISKS + 1];
-    int isdestroyed;
+//    int isdestroyed;
 
-    struct spinlock dirty;
-    int maxdirty;
+    //struct spinlock dirty;
+    //int maxdirty;
 
     union
     {
@@ -60,6 +67,7 @@ struct RAIDMeta
         struct RAID1Data raid1;
         struct RAID0_1Data raid0_1;
         struct RAID4Data raid4;
+        struct RAID5Data raid5;
     } data;
 
     // virtual "methods" for each type
