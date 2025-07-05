@@ -82,12 +82,13 @@ readinvalid(int diskn, int blockn, uchar* data)
         acquiresleep(&raiddata->lock[i]);
 
     for (int i = 0; i < DISKS; i++)
-        if (i != diskn)
-        {
-            read_block(diskn+1, blockn, buff);
+    {
+        if (i != diskn) {
+            read_block(raidmeta.diskinfo[i].diskn, blockn, buff);
             for (int j = 0; j < BSIZE; j++)
                 parity[j] ^= buff[j];
         }
+    }
 
     // release all disk locks
     for (int i = 0; i < DISKS; i++)

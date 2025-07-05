@@ -19,24 +19,24 @@ main(int argc, char *argv[])
         for (uint j = 0; j < block_size; j++) {
           blk[j] = j + i;
         }
-        write_raid(i+2000, blk);
+        write_raid(i, blk);
     }
 
     check_data(blocks, blk, block_size);
 
     printf("First check passed\n");
 
-//    disk_fail_raid(2);+128
-//
-//    check_data(blocks, blk, block_size);
-//
-//    printf("Second check passed\n");
-//
-//    disk_repaired_raid(2);
-//
-//    check_data(blocks, blk, block_size);
-//
-//    printf("Third check passed\n");
+    disk_fail_raid(2);
+
+    check_data(blocks, blk, block_size);
+
+    printf("Second check passed\n");
+
+    disk_repaired_raid(2);
+
+    check_data(blocks, blk, block_size);
+
+    printf("Third check passed\n");
 
     free(blk);
 
@@ -47,7 +47,7 @@ void check_data(uint blocks, uchar *blk, uint block_size)
 {
     for (uint i = 0; i < blocks; i++)
     {
-        read_raid(i+2000, blk);
+        read_raid(i, blk);
         for (uint j = 0; j < block_size; j++)
         {
             if ((uchar)(j + i) != blk[j])

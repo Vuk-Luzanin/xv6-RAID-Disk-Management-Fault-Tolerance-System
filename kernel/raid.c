@@ -463,6 +463,51 @@ raidrepair(int diskn)
 
             return 0;
         }
+        case RAID4:
+        {
+            // TODO: da li treba dodati writeraidmeta na kraj cele fije
+            // TODO: proveriti ovu repair impl.
+            uchar* newpg = (uchar*)kalloc();
+            uchar* buff = newpg;
+            uchar* parity = newpg + BSIZE;
+
+
+            struct RAID4Data* raiddata = &raidmeta.data.raid4;
+            // acquire every disk lock
+            for (int i = 0; i < DISKS; i++)
+                acquiresleep(&raiddata->lock[i]);
+
+            for (int b = 0; b <= diskblockn(); b++)
+            {
+                // set parity to be 0
+                for (int i = 0; i < BSIZE; i++)
+                    parity[i] = 0;
+
+                // repaired value is in parity - find it first
+                for (int i = 0; i < DISKS; i++)
+                {
+                    if (i != diskn) {
+                        read_block(raidmeta.diskinfo[i].diskn, b, buff);
+                        for (int j = 0; j < BSIZE; j++)
+                            parity[j] ^= buff[j];
+                    }
+                }
+
+                // write correct value on disk
+                write_block(raidmeta.diskinfo[diskn].diskn, b, parity);
+            }
+
+            raidmeta.diskinfo[diskn].valid = 1;
+
+            // release all disk locks
+            for (int i = 0; i < DISKS; i++)
+                releasesleep(&raiddata->lock[i]);
+
+            kfree(newpg);
+
+            return 0;
+        }
+
         default:
         {}
     }

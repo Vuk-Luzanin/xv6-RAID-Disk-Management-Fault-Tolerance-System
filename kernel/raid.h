@@ -56,6 +56,7 @@ struct RAIDMeta
 {
     enum RAID_TYPE type;
     struct DiskInfo diskinfo[DISKS + 1];
+//    TODO : da li dodati ovaj flag
 //    int isdestroyed;
 
     //struct spinlock dirty;
