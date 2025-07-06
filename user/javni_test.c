@@ -60,7 +60,7 @@ void check_data(uint blocks, uchar *blk, uint block_size)
             {
                 printf("expected=%d got=%d", j + i, blk[j]);
                 printf("Data in the block %d faulty\n", i);
-                    break;
+                break;
             }
         }
     }

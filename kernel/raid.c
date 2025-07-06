@@ -38,20 +38,7 @@ uint64 (*writetable[])(int vblkn, uchar* data) =
 // global variable
 struct RAIDMeta raidmeta;
 
-// old impl.
-//void
-//writeraidmeta()
-//{
-//    //printf("cuva raidmeta\n");
-//    // write structure on last block on every disk
-//    int lastblockondisk = diskblockn();
-//    uchar data[BSIZE] = {0};
-//    memmove(data, &raidmeta, sizeof(raidmeta));
-//    for (int i = 1; i <= DISKS; i++)
-//        write_block(i, lastblockondisk, data);
-//}
 
-// new impl -> need to be checked
 void
 writeraidmeta()
 {

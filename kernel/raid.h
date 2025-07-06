@@ -7,7 +7,7 @@ struct DiskInfo
 {
     uint8 valid;
     uint8 diskn;        // number from [1-8]
-    struct sleeplock lock;      // disk lock - mutex
+    struct sleeplock lock;      // disk lock - mutex, first acquire raid locks, and then this disk lock
 };
 
 struct DiskPair
@@ -43,6 +43,7 @@ struct RAID4Data
     struct sleeplock clusterlock;                                           // lock for cluster_loaded array
 };
 
+//
 struct RAID5Data
 {
 //    struct sleeplock lock[DISKS];                                           // lock per disk -> moved to diskinfo
@@ -57,7 +58,6 @@ struct RAIDMeta
 {
     enum RAID_TYPE type;
     struct DiskInfo diskinfo[DISKS + 1];
-//    TODO : da li dodati ovaj flag
 //    int valid;
 
 
@@ -77,6 +77,7 @@ struct RAIDMeta
     uint64 (*read)(int vblkn, uchar* data);
     uint64 (*write)(int vblkn, uchar* data);
 };
+
 
 
 #endif //RAID_H
