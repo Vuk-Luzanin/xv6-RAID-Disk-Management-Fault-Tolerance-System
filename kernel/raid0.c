@@ -28,16 +28,16 @@ raid0read(int vblkn, uchar* data)
     uint pblkn = vblkn / DISKS;
 
 
-    struct RAID0Data* raiddata = &raidmeta.data.raid0;
+//    struct RAID0Data* raiddata = &raidmeta.data.raid0;
 
-    struct DiskInfo* disk = &raidmeta.diskinfo[diskn];
+    struct DiskInfo* diskInfo = &raidmeta.diskinfo[diskn];
 
-    if (!disk->valid)
+    if (!diskInfo->valid)
         return -1;
 
-    acquiresleep(&raiddata->lock[diskn]);
-    read_block(disk->diskn, pblkn, (uchar*)data);
-    releasesleep(&raiddata->lock[diskn]);
+    acquiresleep(&diskInfo->lock);
+    read_block(diskInfo->diskn, pblkn, (uchar*)data);
+    releasesleep(&diskInfo->lock);
     return 0;
 }
 
@@ -53,16 +53,16 @@ raid0write(int vblkn, uchar* data)
     uint diskn = vblkn % DISKS;
     uint pblkn = vblkn / DISKS;
 
-    struct RAID0Data* raiddata = &raidmeta.data.raid0;
+//    struct RAID0Data* raiddata = &raidmeta.data.raid0;
 
-    struct DiskInfo* disk = &raidmeta.diskinfo[diskn];
+    struct DiskInfo* diskInfo = &raidmeta.diskinfo[diskn];
 
-    if (!disk->valid)
+    if (!diskInfo->valid)
         return -1;
 
-    acquiresleep(&raiddata->lock[diskn]);
-    write_block(disk->diskn, pblkn, (uchar*)data);
-    releasesleep(&raiddata->lock[diskn]);
+    acquiresleep(&diskInfo->lock);
+    write_block(diskInfo->diskn, pblkn, (uchar*)data);
+    releasesleep(&diskInfo->lock);
 
     return 0;
 }

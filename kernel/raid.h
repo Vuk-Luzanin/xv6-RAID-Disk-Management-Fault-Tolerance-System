@@ -7,7 +7,7 @@ struct DiskInfo
 {
     uint8 valid;
     uint8 diskn;        // number from [1-8]
-    //struct sleeplock lock;      // disk lock - mutex
+    struct sleeplock lock;      // disk lock - mutex
 };
 
 struct DiskPair
@@ -20,7 +20,7 @@ struct DiskPair
 
 struct RAID0Data
 {
-    struct sleeplock lock[DISKS];       // lock per disk
+//    struct sleeplock lock[DISKS];       // lock per disk
 };
 
 struct RAID1Data

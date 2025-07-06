@@ -142,8 +142,12 @@ loadraid(void)
         // disks will have diskn -> [1, 8]
         raidmeta.diskinfo[i].diskn = i + 1;         // + 1 because we cannot access disk 0
         raidmeta.diskinfo[i].valid = 1;
+
+        // initialize lock per disk
+        initsleeplock(&raidmeta.diskinfo[i].lock, "diskinfolock");
     }
     raidmeta.diskinfo[DISKS].valid = 0;
+
 
     //initlock(&raidmeta.dirty, "raidmetadirty");
     //raidmeta.maxdirty = -1;
@@ -174,9 +178,6 @@ setraidtype(int type)
     switch (type) {
         case RAID0:
         {
-            struct RAID0Data *raiddata = &raidmeta.data.raid0;
-            for (int i = 0; i < DISKS; i++)
-                initsleeplock(&raiddata->lock[i], "raidlock");
             break;
         }
         case RAID1:
@@ -238,6 +239,7 @@ setraidtype(int type)
     return 0;
 }
 
+// multiple readers, single writer
 uint64
 readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
 {
@@ -276,7 +278,10 @@ readdiskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
     if (diskn == -1 || readfromPair == -1)
         panic("raid1read");
 
+    // acquire disk locks
+    acquiresleep(&diskpair->disk[readfromPair]->lock);
     read_block(diskn, pblkn, data);
+    releasesleep(&diskpair->disk[readfromPair]->lock);
 
     acquire(&diskpair->mutex);
     diskpair->reading[readfromPair] = 0;
@@ -316,10 +321,17 @@ writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
         break;
     }
 
+    // acquire disk locks
+    for (int i=0; i<2; i++)
+        acquiresleep(&diskpair->disk[i]->lock);
+
     // write in both parts of mirror if valid
     for (int i = 0; i < 2; i++)
         if (diskpair->disk[i]->valid)
             write_block(diskpair->disk[i]->diskn, pblkn, (uchar*)data);
+
+    for (int i=0; i<2; i++)
+        releasesleep(&diskpair->disk[i]->lock);
 
     acquire(&diskpair->mutex);
     diskpair->writing = 0;
@@ -408,6 +420,10 @@ raidrepair(int diskn)
                 break;
             }
 
+            // acquire disk locks
+            for (int i=0; i<2; i++)
+                acquiresleep(&diskpair->disk[i]->lock);
+
             // WRITE EVERY BLOCK ON DISK FROM PAIR
             for (int i = 0; i <= diskblockn(); i++)
             {
@@ -415,6 +431,10 @@ raidrepair(int diskn)
                 read_block(pair->diskn, i, data);
                 write_block(raidmeta.diskinfo[diskn].diskn, i, data);
             }
+
+            // release disk locks
+            for (int i=0; i<2; i++)
+                releasesleep(&diskpair->disk[i]->lock);
 
             raidmeta.diskinfo[diskn].valid = 1;
             acquire(&diskpair->mutex);
@@ -448,12 +468,20 @@ raidrepair(int diskn)
                 break;
             }
 
+            // acquire disk locks
+            for (int i=0; i<2; i++)
+                acquiresleep(&diskpair->disk[i]->lock);
+
             for (int i = 0; i <= diskblockn(); i++)
             {
                 uchar data[BSIZE];
                 read_block(pair->diskn, i, data);
                 write_block(raidmeta.diskinfo[diskn].diskn, i, data);
             }
+
+            // release disk locks
+            for (int i=0; i<2; i++)
+                releasesleep(&diskpair->disk[i]->lock);
 
             raidmeta.diskinfo[diskn].valid = 1;
             acquire(&diskpair->mutex);
