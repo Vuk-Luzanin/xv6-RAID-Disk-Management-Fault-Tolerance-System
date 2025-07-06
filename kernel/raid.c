@@ -125,6 +125,13 @@ loadraid(void)
     // extract raidmeta structure from block - must read in every case
     memmove(&raidmeta, data, sizeof(raidmeta));
 
+    // this step is essential because when writing raidmeta on disk, all locks are acquired, so, next time when loaded, every lock will be held -> deadlock
+    for (int i = 0; i < DISKS; i++)
+    {
+        // initialize lock per disk
+        initsleeplock(&raidmeta.diskinfo[i].lock, "diskinfolock");
+    }
+
     if (prevState == 1)
     {
 //        printf("MAXDIRTY je sacuvan: %d\n", raidmeta.maxdirty);
@@ -138,8 +145,8 @@ loadraid(void)
         raidmeta.diskinfo[i].diskn = i + 1;         // + 1 because we cannot access disk 0
         raidmeta.diskinfo[i].valid = 1;
 
-        // initialize lock per disk
-        initsleeplock(&raidmeta.diskinfo[i].lock, "diskinfolock");
+        // initialize lock per disk - moved to execute always, not just when not initialized
+//        initsleeplock(&raidmeta.diskinfo[i].lock, "diskinfolock");
     }
     raidmeta.diskinfo[DISKS].valid = 0;
 
