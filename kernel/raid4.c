@@ -83,7 +83,8 @@ readinvalid(int diskn, int blockn, uchar* data)
 
     for (int i = 0; i < DISKS; i++)
     {
-        if (i != diskn) {
+        if (i != diskn)
+        {
             read_block(raidmeta.diskinfo[i].diskn, blockn, buff);
             for (int j = 0; j < BSIZE; j++)
                 parity[j] ^= buff[j];

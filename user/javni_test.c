@@ -7,7 +7,7 @@ void check_data(uint blocks, uchar *blk, uint block_size);
 int
 main(int argc, char *argv[])
 {
-    init_raid(RAID4);
+    init_raid(RAID0_1);
 
     uint disk_num, block_num, block_size;
     info_raid(&block_num, &block_size, &disk_num);
@@ -37,6 +37,12 @@ main(int argc, char *argv[])
     check_data(blocks, blk, block_size);
 
     printf("Third check passed\n");
+
+    // added
+    destroy_raid();
+    check_data(blocks, blk, block_size);
+    printf("Fourth check passed\n");
+    // end added
 
     free(blk);
 

@@ -7,6 +7,7 @@ struct DiskInfo
 {
     uint8 valid;
     uint8 diskn;        // number from [1-8]
+    //struct sleeplock lock;      // disk lock - mutex
 };
 
 struct DiskPair
@@ -57,7 +58,8 @@ struct RAIDMeta
     enum RAID_TYPE type;
     struct DiskInfo diskinfo[DISKS + 1];
 //    TODO : da li dodati ovaj flag
-//    int isdestroyed;
+//    int valid;
+
 
     //struct spinlock dirty;
     //int maxdirty;

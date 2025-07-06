@@ -466,11 +466,10 @@ raidrepair(int diskn)
         case RAID4:
         {
             // TODO: da li treba dodati writeraidmeta na kraj cele fije
-            // TODO: proveriti ovu repair impl.
+            // similar to readinvalid func
             uchar* newpg = (uchar*)kalloc();
             uchar* buff = newpg;
             uchar* parity = newpg + BSIZE;
-
 
             struct RAID4Data* raiddata = &raidmeta.data.raid4;
             // acquire every disk lock
@@ -486,7 +485,8 @@ raidrepair(int diskn)
                 // repaired value is in parity - find it first
                 for (int i = 0; i < DISKS; i++)
                 {
-                    if (i != diskn) {
+                    if (i != diskn)
+                    {
                         read_block(raidmeta.diskinfo[i].diskn, b, buff);
                         for (int j = 0; j < BSIZE; j++)
                             parity[j] ^= buff[j];
@@ -499,7 +499,7 @@ raidrepair(int diskn)
 
             raidmeta.diskinfo[diskn].valid = 1;
 
-            // release all disk locks
+//          release all disk locks
             for (int i = 0; i < DISKS; i++)
                 releasesleep(&raiddata->lock[i]);
 
@@ -517,7 +517,7 @@ raidrepair(int diskn)
 uint64
 raiddestroy(void)
 {
-    raidmeta.type = -1;
+    //raidmeta.type = -1;
 
     int lastblockondisk = diskblockn();
     uchar data[BSIZE];                  // write all 1 on last block on every disk
