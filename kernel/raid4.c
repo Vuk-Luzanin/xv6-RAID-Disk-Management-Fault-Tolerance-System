@@ -29,9 +29,10 @@ loadcluster(uint64 clustern)
     uchar* parity = page + BSIZE;
 
     struct RAID4Data* raiddata = &raidmeta.data.raid4;
+
     // acquire all disk locks
     for (int i = 0; i < DISKS; i++)
-        acquiresleep(&raiddata->lock[i]);
+        acquiresleep(&raidmeta.diskinfo[i].lock);
 
     uint64 startblock = clustern * CLUSTER_SIZE;
     for (int i=startblock; i<startblock + CLUSTER_SIZE; i++)
@@ -55,17 +56,18 @@ loadcluster(uint64 clustern)
 
     raiddata->cluster_loaded[clustern] = 1;
 
-    writeraidmeta();
-
     // release all disk locks
     for (int i = 0; i < DISKS; i++)
-        releasesleep(&raiddata->lock[i]);
+        releasesleep(&raidmeta.diskinfo[i].lock);
+
+    writeraidmeta();
 
     kfree(page);
     return 0;
 }
 
 // read data from invalid disk, if it is the only one that is invalid
+// cluster lock must be held when called
 int
 readinvalid(int diskn, int blockn, uchar* data)
 {
@@ -76,10 +78,10 @@ readinvalid(int diskn, int blockn, uchar* data)
     for (int i = 0; i < BSIZE; i++)
         parity[i] = 0;
 
-    struct RAID4Data* raiddata = &raidmeta.data.raid4;
+//    struct RAID4Data* raiddata = &raidmeta.data.raid4;
     // acquire every disk lock
     for (int i = 0; i < DISKS; i++)
-        acquiresleep(&raiddata->lock[i]);
+        acquiresleep(&raidmeta.diskinfo[i].lock);
 
     for (int i = 0; i < DISKS; i++)
     {
@@ -93,7 +95,7 @@ readinvalid(int diskn, int blockn, uchar* data)
 
     // release all disk locks
     for (int i = 0; i < DISKS; i++)
-        releasesleep(&raiddata->lock[i]);
+        releasesleep(&raidmeta.diskinfo[i].lock);
 
     for (int i = 0; i < BSIZE; i++)
         data[i] = parity[i];
@@ -114,7 +116,7 @@ raid4read(int vblkn, uchar* data)
     uint64 diskn = vblkn % (DISKS - 1);
     uint64 pblkn = vblkn / (DISKS - 1);
 
-    struct RAID4Data* raiddata = &raidmeta.data.raid4;
+//    struct RAID4Data* raiddata = &raidmeta.data.raid4;
     struct DiskInfo* diskinfo = raidmeta.diskinfo;
 
     if (!diskinfo[diskn].valid)     // if disk is not valid, try to repair data from it
@@ -125,9 +127,9 @@ raid4read(int vblkn, uchar* data)
         return readinvalid(diskn, pblkn, data);
     }
 
-    acquiresleep(&raiddata->lock[diskn]);
+    acquiresleep(&raidmeta.diskinfo[diskn].lock);
     read_block(diskn+1, pblkn, data);
-    releasesleep(&raiddata->lock[diskn]);
+    releasesleep(&raidmeta.diskinfo[diskn].lock);
 
     return 0;
 }
@@ -161,8 +163,8 @@ raid4write(int vblkn, uchar* data)
     uchar* prevdata = page;
     uchar* parity = page + BSIZE;
 
-    acquiresleep(&raiddata->lock[diskn]);
-    acquiresleep(&raiddata->lock[DISKS - 1]);
+    acquiresleep(&raidmeta.diskinfo[diskn].lock);
+    acquiresleep(&raidmeta.diskinfo[DISKS - 1].lock);
 
     read_block(diskn+1, pblkn, prevdata);
     read_block(DISKS, pblkn, parity);
@@ -174,8 +176,8 @@ raid4write(int vblkn, uchar* data)
     // write new parity
     write_block(DISKS, pblkn, parity);
 
-    releasesleep(&raiddata->lock[diskn]);
-    releasesleep(&raiddata->lock[DISKS - 1]);
+    releasesleep(&raidmeta.diskinfo[diskn].lock);
+    releasesleep(&raidmeta.diskinfo[DISKS - 1].lock);
 
     kfree(page);
 

@@ -55,6 +55,10 @@ struct RAIDMeta raidmeta;
 void
 writeraidmeta()
 {
+    // acquire all disk locks
+    for (int i = 0; i < DISKS; i++)
+        acquiresleep(&raidmeta.diskinfo[i].lock);
+
     //printf("cuva raidmeta\n");
     // write structure on last block on every disk
     for (int i = 1; i <= DISKS; i++)
@@ -68,6 +72,10 @@ writeraidmeta()
             write_block(i, lastblockondisk, data);
         }
     }
+
+    // release all disk locks
+    for (int i = 0; i < DISKS; i++)
+        releasesleep(&raidmeta.diskinfo[i].lock);
 }
 
 
@@ -214,8 +222,8 @@ setraidtype(int type)
 
             struct RAID4Data* raiddata = &raidmeta.data.raid4;
 
-            for (int i=0; i<DISKS; i++)
-                initsleeplock(&raiddata->lock[i], "disklock");
+//            for (int i=0; i<DISKS; i++)
+//                initsleeplock(&raiddata->lock[i], "disklock");
             initsleeplock(&raiddata->clusterlock, "clusterlock");
 
             //int maxdirtycluster = raidmeta.maxdirty > 0 ? raidmeta.maxdirty / CLUSTER_SIZE : raidmeta.maxdirty;
@@ -392,7 +400,8 @@ raidrepair(int diskn)
     if (raidmeta.diskinfo[diskn].valid)
         return 0;
 
-    switch (raidmeta.type) {
+    switch (raidmeta.type)
+    {
         case RAID0:
         {
             return -1;
@@ -442,7 +451,7 @@ raidrepair(int diskn)
             release(&diskpair->mutex);
             wakeup(&diskpair->mutex);
 
-            return 0;
+            break;
         }
         case RAID0_1:
         {
@@ -489,23 +498,39 @@ raidrepair(int diskn)
             release(&diskpair->mutex);
             wakeup(&diskpair->mutex);
 
-            return 0;
+            break;
         }
         case RAID4:
         {
-            // TODO: da li treba dodati writeraidmeta na kraj cele fije
+            // more disks are not valid -> could not be fixed
+            for (int i=0; i<DISKS; i++)
+                if (i != diskn && !raidmeta.diskinfo[i].valid)
+                    return -1;
+
             // similar to readinvalid func
             uchar* newpg = (uchar*)kalloc();
             uchar* buff = newpg;
             uchar* parity = newpg + BSIZE;
 
-            struct RAID4Data* raiddata = &raidmeta.data.raid4;
+//            struct RAID4Data* raiddata = &raidmeta.data.raid4;
             // acquire every disk lock
             for (int i = 0; i < DISKS; i++)
-                acquiresleep(&raiddata->lock[i]);
+                acquiresleep(&raidmeta.diskinfo[i].lock);
 
             for (int b = 0; b <= diskblockn(); b++)
             {
+                // if cluster has not been loaded before, no need for repair
+                struct RAID4Data* raiddata = &raidmeta.data.raid4;
+                uint64 clustern = b / CLUSTER_SIZE;
+
+                acquiresleep(&raiddata->clusterlock);
+                if (!raiddata->cluster_loaded[clustern])
+                {
+                    releasesleep(&raiddata->clusterlock);
+                    continue;
+                }
+                releasesleep(&raiddata->clusterlock);
+
                 // set parity to be 0
                 for (int i = 0; i < BSIZE; i++)
                     parity[i] = 0;
@@ -529,16 +554,17 @@ raidrepair(int diskn)
 
 //          release all disk locks
             for (int i = 0; i < DISKS; i++)
-                releasesleep(&raiddata->lock[i]);
+                releasesleep(&raidmeta.diskinfo[i].lock);
 
             kfree(newpg);
 
-            return 0;
+            break;
         }
 
         default:
         {}
     }
+    writeraidmeta();
     return 0;
 }
 
