@@ -41,6 +41,11 @@ struct RAID4Data
 //    struct sleeplock lock[DISKS];                                           // lock per disk -> moved to diskinfo
     uint8 cluster_loaded[DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE];           // has been initialized flag for cluster (parity disk is set or not) -> for lazy loading
     struct sleeplock clusterlock;                                           // lock for cluster_loaded array
+
+    // added
+    struct spinlock repairlock;
+    int writecount;
+    int repairing;
 };
 
 //
@@ -60,8 +65,8 @@ struct RAIDMeta
     struct DiskInfo diskinfo[DISKS + 1];
 //    int valid;
 
-
     //struct spinlock dirty;
+    //int maxdirty; //struct spinlock dirty;
     //int maxdirty;
 
     union

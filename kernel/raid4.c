@@ -18,6 +18,7 @@ loadcluster(uint64 clustern)
     if (raidmeta.type != RAID4)
         panic("wrong raid function called\n");
 
+    // parity not valid - cannot load - could be removed
     if (!raidmeta.diskinfo[DISKS - 1].valid)
         return -1;
 
@@ -51,7 +52,11 @@ loadcluster(uint64 clustern)
                     parity[i] ^= data[i];
             }
         }
-        write_block(DISKS, i, parity);
+
+        if (diskinfo[DISKS - 1].valid)
+        {
+            write_block(DISKS, i, parity);
+        }
     }
 
     raiddata->cluster_loaded[clustern] = 1;
@@ -68,6 +73,7 @@ loadcluster(uint64 clustern)
 
 // read data from invalid disk, if it is the only one that is invalid
 // cluster lock must be held when called
+// all disk locks must be held when called
 int
 readinvalid(int diskn, int blockn, uchar* data)
 {
@@ -79,9 +85,6 @@ readinvalid(int diskn, int blockn, uchar* data)
         parity[i] = 0;
 
 //    struct RAID4Data* raiddata = &raidmeta.data.raid4;
-    // acquire every disk lock
-    for (int i = 0; i < DISKS; i++)
-        acquiresleep(&raidmeta.diskinfo[i].lock);
 
     for (int i = 0; i < DISKS; i++)
     {
@@ -93,16 +96,13 @@ readinvalid(int diskn, int blockn, uchar* data)
         }
     }
 
-    // release all disk locks
-    for (int i = 0; i < DISKS; i++)
-        releasesleep(&raidmeta.diskinfo[i].lock);
-
     for (int i = 0; i < BSIZE; i++)
         data[i] = parity[i];
 
     kfree(newpg);
     return 0;
 }
+
 
 uint64
 raid4read(int vblkn, uchar* data)
@@ -121,15 +121,27 @@ raid4read(int vblkn, uchar* data)
 
     if (!diskinfo[diskn].valid)     // if disk is not valid, try to repair data from it
     {
+        // are there more invalid disks
         for (int i = 0; i < DISKS; i++)
             if (i != diskn && !diskinfo[i].valid)       // there are more invalid disks, so it cannot be repaired
                 return -1;
-        return readinvalid(diskn, pblkn, data);
-    }
 
-    acquiresleep(&raidmeta.diskinfo[diskn].lock);
-    read_block(diskn+1, pblkn, data);
-    releasesleep(&raidmeta.diskinfo[diskn].lock);
+        // acquire every disk lock
+        for (int i = 0; i < DISKS; i++)
+            acquiresleep(&raidmeta.diskinfo[i].lock);
+
+        readinvalid(diskn, pblkn, data);
+
+        // release all disk locks
+        for (int i = 0; i < DISKS; i++)
+            releasesleep(&raidmeta.diskinfo[i].lock);
+    }
+    else
+    {
+        acquiresleep(&raidmeta.diskinfo[diskn].lock);
+        read_block(diskn+1, pblkn, data);
+        releasesleep(&raidmeta.diskinfo[diskn].lock);
+    }
 
     return 0;
 }
@@ -147,41 +159,88 @@ raid4write(int vblkn, uchar* data)
     uint64 pblkn = vblkn / (DISKS - 1);
 
     struct DiskInfo* diskinfo = raidmeta.diskinfo;
-    if (!diskinfo[diskn].valid || !diskinfo[DISKS - 1].valid)
-        return -1;
+
+    // are there 2 or more invalid disks
+//    if (!diskinfo[diskn].valid || !diskinfo[DISKS - 1].valid)
+//        return -1;
 
     struct RAID4Data* raiddata = &raidmeta.data.raid4;
 
     uint64 clustern = pblkn / CLUSTER_SIZE;
 
-    acquiresleep(&raiddata->clusterlock);
-    if (!raiddata->cluster_loaded[clustern])
-        loadcluster(clustern);
-    releasesleep(&raiddata->clusterlock);
-
     uchar* page = (uchar*) kalloc();
     uchar* prevdata = page;
     uchar* parity = page + BSIZE;
 
-    acquiresleep(&raidmeta.diskinfo[diskn].lock);
-    acquiresleep(&raidmeta.diskinfo[DISKS - 1].lock);
+    // REPAIR - LOCK -ADD
+    acquire(&raiddata->repairlock);
+    while (raiddata->repairing)
+    {
+        sleep(&raiddata->repairing, &raiddata->repairlock);
+    }
+    raiddata->writecount++;
+    release(&raiddata->repairlock);
 
-    read_block(diskn+1, pblkn, prevdata);
-    read_block(DISKS, pblkn, parity);
+    acquiresleep(&raiddata->clusterlock);
+    if (!raiddata->cluster_loaded[clustern])
+    {
+        loadcluster(clustern);
+    }
+    releasesleep(&raiddata->clusterlock);
 
-    for (int i=0; i<BSIZE; i++)
-        parity[i] ^= prevdata[i] ^ data[i];
+    if (!diskinfo[diskn].valid)
+    {
+        // acquire every disk lock
+        for (int i = 0; i < DISKS; i++)
+            acquiresleep(&raidmeta.diskinfo[i].lock);
 
-    write_block(diskn+1, pblkn, data);
-    // write new parity
-    write_block(DISKS, pblkn, parity);
+        readinvalid(diskn, pblkn, prevdata);
+        read_block(DISKS, pblkn, parity);       // prob not needed
 
-    releasesleep(&raidmeta.diskinfo[diskn].lock);
-    releasesleep(&raidmeta.diskinfo[DISKS - 1].lock);
+        for (int i = 0; i < BSIZE; i++)
+            parity[i] ^= prevdata[i] ^ data[i];
+
+        write_block(DISKS, pblkn, parity);
+
+        // release all disk locks
+        for (int i = 0; i < DISKS; i++)
+            releasesleep(&raidmeta.diskinfo[i].lock);
+    }
+    else if (!diskinfo[DISKS-1].valid)
+    {
+        acquiresleep(&raidmeta.diskinfo[diskn].lock);
+        write_block(diskn + 1, pblkn, data);
+        releasesleep(&raidmeta.diskinfo[diskn].lock);
+    }
+    else
+    {
+        acquiresleep(&raidmeta.diskinfo[diskn].lock);
+        acquiresleep(&raidmeta.diskinfo[DISKS - 1].lock);
+
+        read_block(diskn + 1, pblkn, prevdata);
+        read_block(DISKS, pblkn, parity);
+
+        for (int i = 0; i < BSIZE; i++)
+            parity[i] ^= prevdata[i] ^ data[i];
+
+        write_block(diskn + 1, pblkn, data);
+        // write new parity
+        write_block(DISKS, pblkn, parity);
+
+        releasesleep(&raidmeta.diskinfo[DISKS - 1].lock);
+        releasesleep(&raidmeta.diskinfo[diskn].lock);
+    }
 
     kfree(page);
 
-    writeraidmeta();
+    // REPAIR - LOCK -ADD
+    acquire(&raiddata->repairlock);
+    raiddata->writecount--;
+    if (raiddata->writecount == 0)
+    {
+        wakeup(&raiddata->writecount);
+    }
+    release(&raiddata->repairlock);
 
     return 0;
 }

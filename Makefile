@@ -192,7 +192,7 @@ CPUS := 2
 endif
 
 ifndef MEM
-MEM := 16M
+MEM := 32M
 endif
 
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m $(MEM) -smp $(CPUS) -nographic

@@ -2433,7 +2433,7 @@ textwrite(char *s)
 
   pid = fork();
   if(pid == 0) {
-    volatile int *addr = (int *) 0;
+    volatile int *addr = (int *) 0xFFFFFFFF;
     *addr = 10;
     exit(1);
   } else if(pid < 0){

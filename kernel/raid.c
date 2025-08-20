@@ -21,7 +21,7 @@ uint64 raid4write(int vblkn, uchar* data);
 // virtual function table
 uint64 (*readtable[])(int vblkn, uchar* data) =
 {
-        [RAID0] = raid0read,            // on index 0 is raid0read...
+        [RAID0] = raid0read,            // on index 0 ([RAID0]) is raid0read...
         [RAID1] = raid1read,
         [RAID0_1] = raid0_1read,
         [RAID4] = raid4read
@@ -164,7 +164,6 @@ loadraid(void)
         raidmeta.read = raidmeta.write = 0;
     }
     writeraidmeta();
-    //printf("MAXDIRTY je resetovan: %d\n", raidmeta.maxdirty);
 }
 
 uint64
@@ -228,6 +227,10 @@ setraidtype(int type)
 
             //for (int i=maxdirtycluster+1; i<NELEM(raiddata->cluster_loaded); i++)
             //    raiddata->cluster_loaded[i] = 1;
+
+            initlock(&raiddata->repairlock, "repairlock_raid4");
+            raiddata->repairing = 0;
+            raiddata->writecount = 0;
 
             for (int i=0; i<NELEM(raiddata->cluster_loaded); i++)
                 raiddata->cluster_loaded[i] = 0;
@@ -501,6 +504,17 @@ raidrepair(int diskn)
                 if (i != diskn && !raidmeta.diskinfo[i].valid)
                     return -1;
 
+            struct RAID4Data* raiddata = &raidmeta.data.raid4;
+
+            // REPAIR - LOCK -ADD
+            acquire(&raiddata->repairlock);
+            raiddata->repairing++;
+            while (raiddata->writecount != 0 && raiddata->repairing != 0)
+            {
+                sleep(&raiddata->writecount, &raiddata->repairlock);
+            }
+            release(&raiddata->repairlock);
+
             // similar to readinvalid func
             uchar* newpg = (uchar*)kalloc();
             uchar* buff = newpg;
@@ -514,7 +528,6 @@ raidrepair(int diskn)
             for (int b = 0; b <= diskblockn(); b++)
             {
                 // if cluster has not been loaded before, no need for repair
-                struct RAID4Data* raiddata = &raidmeta.data.raid4;
                 uint64 clustern = b / CLUSTER_SIZE;
 
                 acquiresleep(&raiddata->clusterlock);
@@ -525,6 +538,7 @@ raidrepair(int diskn)
                 }
                 releasesleep(&raiddata->clusterlock);
 
+                // SIMILAR CODE TO readinvalid - maybe move there
                 // set parity to be 0
                 for (int i = 0; i < BSIZE; i++)
                     parity[i] = 0;
@@ -551,6 +565,15 @@ raidrepair(int diskn)
                 releasesleep(&raidmeta.diskinfo[i].lock);
 
             kfree(newpg);
+
+            // REPAIR - LOCK -ADD
+            acquire(&raiddata->repairlock);
+            raiddata->repairing--;
+            if (raiddata->repairing == 0)
+            {
+                wakeup(&raiddata->repairing);
+            }
+            release(&raiddata->repairlock);
 
             break;
         }
