@@ -22,7 +22,7 @@ void check_data(uint blocks, uchar blk[BSIZE], uchar blk_read[BSIZE], uint block
 int
 main() {
     printf("Testiranje init_raid...\n");
-    init_raid(RAID4);
+    init_raid(RAID5);
     printf("Uspesna inicijalizacija raida...\n");
     printf("\n-----------------------------------------------------------------------------------------------------\n\n");
 

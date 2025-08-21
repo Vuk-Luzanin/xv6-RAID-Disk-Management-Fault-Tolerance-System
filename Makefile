@@ -35,6 +35,7 @@ OBJS = \
   $K/raid1.o \
   $K/raid0_1.o \
   $K/raid4.o \
+  $K/raid5.o \
 
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin

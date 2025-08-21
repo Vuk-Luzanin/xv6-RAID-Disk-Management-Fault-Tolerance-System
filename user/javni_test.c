@@ -7,7 +7,8 @@ void check_data(uint blocks, uchar *blk, uint block_size);
 int
 main(int argc, char *argv[])
 {
-    init_raid(RAID4);
+
+    init_raid(RAID0);
 
     uint disk_num, block_num, block_size;
     info_raid(&block_num, &block_size, &disk_num);
@@ -17,32 +18,20 @@ main(int argc, char *argv[])
     uchar* blk = malloc(block_size);
     for (uint i = 0; i < blocks; i++) {
         for (uint j = 0; j < block_size; j++) {
-          blk[j] = j + i;
+            blk[j] = j + i;
         }
         write_raid(i, blk);
     }
 
     check_data(blocks, blk, block_size);
 
-    printf("First check passed\n");
-
     disk_fail_raid(2);
 
     check_data(blocks, blk, block_size);
 
-    printf("Second check passed\n");
-
     disk_repaired_raid(2);
 
     check_data(blocks, blk, block_size);
-
-    printf("Third check passed\n");
-
-    // added
-    destroy_raid();
-    check_data(blocks, blk, block_size);
-    printf("Fourth check passed\n");
-    // end added
 
     free(blk);
 

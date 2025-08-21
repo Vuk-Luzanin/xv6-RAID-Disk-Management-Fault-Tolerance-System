@@ -12,11 +12,13 @@ uint64 raid0read(int vblkn, uchar* data);
 uint64 raid1read(int vblkn, uchar* data);
 uint64 raid0_1read(int vblkn, uchar* data);
 uint64 raid4read(int vblkn, uchar* data);
+uint64 raid5read(int vblkn, uchar* data);
 
 uint64 raid0write(int vblkn, uchar* data);
 uint64 raid1write(int vblkn, uchar* data);
 uint64 raid0_1write(int vblkn, uchar* data);
 uint64 raid4write(int vblkn, uchar* data);
+uint64 raid5write(int vblkn, uchar* data);
 
 // virtual function table
 uint64 (*readtable[])(int vblkn, uchar* data) =
@@ -24,7 +26,8 @@ uint64 (*readtable[])(int vblkn, uchar* data) =
         [RAID0] = raid0read,            // on index 0 ([RAID0]) is raid0read...
         [RAID1] = raid1read,
         [RAID0_1] = raid0_1read,
-        [RAID4] = raid4read
+        [RAID4] = raid4read,
+        [RAID5] = raid5read
 };
 
 uint64 (*writetable[])(int vblkn, uchar* data) =
@@ -32,12 +35,12 @@ uint64 (*writetable[])(int vblkn, uchar* data) =
         [RAID0] = raid0write,
         [RAID1] = raid1write,
         [RAID0_1] = raid0_1write,
-        [RAID4] = raid4write
+        [RAID4] = raid4write,
+        [RAID5] = raid5write
 };
 
 // global variable
 struct RAIDMeta raidmeta;
-
 
 void
 writeraidmeta()
@@ -64,8 +67,6 @@ writeraidmeta()
     for (int i = 0; i < DISKS; i++)
         releasesleep(&raidmeta.diskinfo[i].lock);
 }
-
-
 
 // DISK_SIZE_BYTES - in bytes
 // BSIZE - size of block in bytes
@@ -105,7 +106,10 @@ loadraid(void)
     int lastblockondisk = diskblockn();
     read_block(1, lastblockondisk, data);
 
-    if (data[BSIZE-1] == 255)
+    // extract raidmeta structure from block - must read in every case
+    memmove(&raidmeta, data, sizeof(raidmeta));
+
+    if (raidmeta.isDestroyed)
     {
         panic("RAID structure was destroyed\n");
         exit(0);
@@ -121,9 +125,6 @@ loadraid(void)
             break;
         }
     }
-
-    // extract raidmeta structure from block - must read in every case
-    memmove(&raidmeta, data, sizeof(raidmeta));
 
     // this step is essential because when writing raidmeta on disk, all locks are acquired, so, next time when loaded, every lock will be held -> deadlock
     for (int i = 0; i < DISKS; i++)
@@ -175,6 +176,7 @@ setraidtype(int type)
     raidmeta.type = type;
     raidmeta.read = readtable[type];
     raidmeta.write = writetable[type];
+    raidmeta.isDestroyed = 0;
 
     switch (type) {
         case RAID0:
@@ -210,7 +212,16 @@ setraidtype(int type)
         }
         case RAID4:
         {
-            if (raidmeta.diskinfo[DISKS - 1].valid == 0)              // if parity is not valid
+            struct DiskInfo* diskinfo = raidmeta.diskinfo;
+
+            int israidable = 0;         // count invalid disks
+            for (int i = 0; i < DISKS; i++)
+            {
+                if (!diskinfo[i].valid)
+                    israidable++;
+            }
+
+            if (israidable > 1)
                 return -1;
 
             struct RAID4Data* raiddata = &raidmeta.data.raid4;
@@ -231,6 +242,33 @@ setraidtype(int type)
             initlock(&raiddata->repairlock, "repairlock_raid4");
             raiddata->repairing = 0;
             raiddata->writecount = 0;
+
+            for (int i=0; i<NELEM(raiddata->cluster_loaded); i++)
+                raiddata->cluster_loaded[i] = 0;
+
+            break;
+        }
+        case RAID5:
+        {
+            struct DiskInfo* diskinfo = raidmeta.diskinfo;
+
+            int israidable = 0;         // count invalid disks
+            for (int i = 0; i < DISKS; i++)
+            {
+                if (!diskinfo[i].valid)
+                    israidable++;
+            }
+
+            if (israidable > 1)
+                return -1;
+
+            struct RAID5Data* raiddata = &raidmeta.data.raid5;
+
+            initlock(&raiddata->repairlock, "repairlock_raid5");
+            raiddata->repairing = 0;
+            raiddata->writecount = 0;
+
+            initsleeplock(&raiddata->clusterlock, "clusterlock");
 
             for (int i=0; i<NELEM(raiddata->cluster_loaded); i++)
                 raiddata->cluster_loaded[i] = 0;
@@ -350,6 +388,12 @@ writediskpair(struct DiskPair* diskpair, int pblkn, uchar* data)
 uint64
 readraid(int vblkn, uchar* data)
 {
+    if (raidmeta.isDestroyed)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
+
     if (raidmeta.read)
         return (*raidmeta.read)(vblkn, data);
     return -1;
@@ -359,6 +403,12 @@ readraid(int vblkn, uchar* data)
 uint64
 writeraid(int vblkn, uchar* data)
 {
+    if (raidmeta.isDestroyed)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
+
     if (raidmeta.write)
         return (*raidmeta.write)(vblkn, data);
     return -1;
@@ -367,6 +417,12 @@ writeraid(int vblkn, uchar* data)
 uint64
 raidfail(int diskn)         // cannot fail disk 0
 {
+    if (raidmeta.isDestroyed)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
+
     // diskn is [1-8]
     diskn--;
     // diskn is [0-7]
@@ -385,6 +441,12 @@ raidfail(int diskn)         // cannot fail disk 0
 uint64
 raidrepair(int diskn)
 {
+    if (raidmeta.isDestroyed)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
+
     if (raidmeta.type < RAID0 || raidmeta.type > RAID5)
         panic("raid not initialized\n");
 
@@ -577,6 +639,86 @@ raidrepair(int diskn)
 
             break;
         }
+        case RAID5:
+        {
+            // more disks are not valid -> could not be fixed
+            for (int i=0; i<DISKS; i++)
+                if (i != diskn && !raidmeta.diskinfo[i].valid)
+                    return -1;
+
+            struct RAID5Data* raiddata = &raidmeta.data.raid5;
+
+            // REPAIR - LOCK -ADD
+            acquire(&raiddata->repairlock);
+            raiddata->repairing++;
+            while (raiddata->writecount != 0 && raiddata->repairing != 0)
+            {
+                sleep(&raiddata->writecount, &raiddata->repairlock);
+            }
+            release(&raiddata->repairlock);
+
+            // similar to readinvalid func
+            uchar* newpg = (uchar*)kalloc();
+            uchar* buff = newpg;
+            uchar* parity = newpg + BSIZE;
+
+//            struct RAID4Data* raiddata = &raidmeta.data.raid4;
+            // acquire every disk lock
+            for (int i = 0; i < DISKS; i++)
+                acquiresleep(&raidmeta.diskinfo[i].lock);
+
+            for (int b = 0; b <= diskblockn(); b++)
+            {
+                // if cluster has not been loaded before, no need for repair
+                uint64 clustern = b / CLUSTER_SIZE;
+
+                acquiresleep(&raiddata->clusterlock);
+                if (!raiddata->cluster_loaded[clustern])
+                {
+                    releasesleep(&raiddata->clusterlock);
+                    continue;
+                }
+                releasesleep(&raiddata->clusterlock);
+
+                // SIMILAR CODE TO readinvalid - maybe move there
+                // set parity to be 0
+                for (int i = 0; i < BSIZE; i++)
+                    parity[i] = 0;
+
+                // repaired value is in parity - find it first
+                for (int i = 0; i < DISKS; i++)
+                {
+                    if (i != diskn)
+                    {
+                        read_block(raidmeta.diskinfo[i].diskn, b, buff);
+                        for (int j = 0; j < BSIZE; j++)
+                            parity[j] ^= buff[j];
+                    }
+                }
+
+                // write correct value on disk
+                write_block(raidmeta.diskinfo[diskn].diskn, b, parity);
+            }
+
+            raidmeta.diskinfo[diskn].valid = 1;
+
+//          release all disk locks
+            for (int i = 0; i < DISKS; i++)
+                releasesleep(&raidmeta.diskinfo[i].lock);
+
+            kfree(newpg);
+
+            // REPAIR - LOCK -ADD
+            acquire(&raiddata->repairlock);
+            raiddata->repairing--;
+            if (raiddata->repairing == 0)
+            {
+                wakeup(&raiddata->repairing);
+            }
+            release(&raiddata->repairlock);
+
+            break;
+        }
 
         default:
         {}
@@ -588,14 +730,23 @@ raidrepair(int diskn)
 uint64
 raiddestroy(void)
 {
-    //raidmeta.type = -1;
+    if (raidmeta.isDestroyed)
+    {
+        panic("RAID structure was destroyed\n");
+        exit(0);
+    }
 
-    int lastblockondisk = diskblockn();
-    uchar data[BSIZE];                  // write all 1 on last block on every disk
-    for (int i = 0; i < BSIZE; i++)
-        data[i] = 255;
-    memmove(data, &raidmeta, sizeof(raidmeta));
-    for (int i = 1; i <= DISKS; i++)
-        write_block(i, lastblockondisk, data);
+    raidmeta.isDestroyed = 1;
+
+    writeraidmeta();
+
+    // first try
+//    int lastblockondisk = diskblockn();
+//    uchar data[BSIZE];                  // write all 1 on last block on every disk
+//    for (int i = 0; i < BSIZE; i++)
+//        data[i] = 255;
+//    memmove(data, &raidmeta, sizeof(raidmeta));
+//    for (int i = 1; i <= DISKS; i++)
+//        write_block(i, lastblockondisk, data);
     return 0;
 }

@@ -13,14 +13,14 @@ extern struct RAIDMeta raidmeta;
 
 // cluster lock must be held when calling
 int
-loadcluster(uint64 clustern)
+loadclusterraid4(uint64 clustern)
 {
     if (raidmeta.type != RAID4)
         panic("wrong raid function called\n");
 
     // parity not valid - cannot load - could be removed
-    if (!raidmeta.diskinfo[DISKS - 1].valid)
-        return -1;
+//    if (!raidmeta.diskinfo[DISKS - 1].valid)
+//        return -1;
 
     if (clustern < 0 || clustern >= DISK_SIZE_BYTES / BSIZE / CLUSTER_SIZE)
         panic("Wrong cluster number in loading...");
@@ -43,11 +43,11 @@ loadcluster(uint64 clustern)
 
         struct DiskInfo* diskinfo = raidmeta.diskinfo;
 
-        for (int diskn=1; diskn<DISKS; diskn++)
+        for (int diskn=0; diskn<DISKS-1; diskn++)
         {
             if (diskinfo[diskn].valid)
             {
-                read_block(diskn, i, data);
+                read_block(diskinfo[diskn].diskn, i, data);
                 for (int i=0; i<BSIZE; i++)
                     parity[i] ^= data[i];
             }
@@ -75,7 +75,7 @@ loadcluster(uint64 clustern)
 // cluster lock must be held when called
 // all disk locks must be held when called
 int
-readinvalid(int diskn, int blockn, uchar* data)
+readinvalidraid4(int diskn, int blockn, uchar* data)
 {
     uchar* newpg = (uchar*)kalloc();
     uchar* buff = newpg;
@@ -103,7 +103,6 @@ readinvalid(int diskn, int blockn, uchar* data)
     return 0;
 }
 
-
 uint64
 raid4read(int vblkn, uchar* data)
 {
@@ -130,7 +129,7 @@ raid4read(int vblkn, uchar* data)
         for (int i = 0; i < DISKS; i++)
             acquiresleep(&raidmeta.diskinfo[i].lock);
 
-        readinvalid(diskn, pblkn, data);
+        readinvalidraid4(diskn, pblkn, data);
 
         // release all disk locks
         for (int i = 0; i < DISKS; i++)
@@ -161,8 +160,14 @@ raid4write(int vblkn, uchar* data)
     struct DiskInfo* diskinfo = raidmeta.diskinfo;
 
     // are there 2 or more invalid disks
-//    if (!diskinfo[diskn].valid || !diskinfo[DISKS - 1].valid)
-//        return -1;
+    if (!diskinfo[diskn].valid)
+    {
+        for (int i = 0; i < DISKS; i++)
+        {
+            if (i != diskn && !diskinfo[i].valid)       // there are more invalid disks, so it cannot be repaired
+                return -1;
+        }
+    }
 
     struct RAID4Data* raiddata = &raidmeta.data.raid4;
 
@@ -184,7 +189,7 @@ raid4write(int vblkn, uchar* data)
     acquiresleep(&raiddata->clusterlock);
     if (!raiddata->cluster_loaded[clustern])
     {
-        loadcluster(clustern);
+        loadclusterraid4(clustern);
     }
     releasesleep(&raiddata->clusterlock);
 
@@ -194,7 +199,7 @@ raid4write(int vblkn, uchar* data)
         for (int i = 0; i < DISKS; i++)
             acquiresleep(&raidmeta.diskinfo[i].lock);
 
-        readinvalid(diskn, pblkn, prevdata);
+        readinvalidraid4(diskn, pblkn, prevdata);
         read_block(DISKS, pblkn, parity);       // prob not needed
 
         for (int i = 0; i < BSIZE; i++)
